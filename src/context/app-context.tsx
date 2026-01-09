@@ -275,58 +275,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     salaryType?: SalaryType,
     salaryAmount?: number
   ) => {
-    if (!auth || !firestore || !accountId) {
+    if (!accountId) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Firebase not initialized.",
+        description: "Account ID not found.",
       });
       return;
     }
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password_DO_NOT_USE);
-      const newUserId = userCredential.user.uid;
-
-      const newMembership: FirestoreMembership = {
+      // Use Server Action to create user
+      // This prevents the current Admin session from being replaced by the new user
+      const { createTeamMember } = await import('@/app/actions');
+      const result = await createTeamMember(accountId, {
         email,
+        password: password_DO_NOT_USE,
         roleId,
         displayName: displayName || email,
-        status: 'accepted',
-        invitedBy: accountId,
-      };
+        pin,
+        salaryType,
+        salaryAmount
+      });
 
-      const membershipDocRef = doc(firestore, getMembershipsCollection(accountId), newUserId);
-      await setDoc(membershipDocRef, newMembership);
-
-      // Now create the user profile with the link to the main account
-      let userProfile: FirestoreUserProfile = {
-        email,
-        associatedAccountId: accountId // <--- LINK TO MAIN ACCOUNT
-      };
-      if (pin) {
-        try {
-          const response = await fetch('/api/auth/hash-pin', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pin }),
-          });
-          const { hashedPin, error } = await response.json();
-          if (error) throw new Error(error);
-          userProfile.accessPin = hashedPin;
-          userProfile.pinSetAt = Timestamp.now();
-        } catch (error: any) {
-          toast({ variant: 'destructive', title: 'PIN Error', description: error.message });
-          // Continue creating user without PIN
-        }
+      if (!result.success) {
+        throw new Error(result.error);
       }
-      if (salaryType && salaryAmount) {
-        userProfile.salaryType = salaryType;
-        if (salaryType === 'HOURLY') userProfile.hourlyRate = salaryAmount;
-        if (salaryType === 'SALARY') userProfile.baseSalary = salaryAmount;
-      }
-
-      const userDocRef = doc(firestore, getUserDocument(newUserId));
-      await setDoc(userDocRef, userProfile, { merge: true });
 
       toast({
         title: 'User Created',
@@ -379,7 +352,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addOrder = async (order: Omit<FirestoreOrder, 'id'>) => {
-    if (!firestore || !accountId) return;
+    if (!firestore || !accountId) return undefined;
     const orderCollection = collection(firestore, getOrdersCollection(accountId));
     return addDocumentNonBlocking(orderCollection, order);
   };
@@ -661,19 +634,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const maskedId = `${o.type === 'Repair' ? 'R' : 'O'}-${index + 1}`;
 
       const relatedInvoice = invoices.find((inv) => inv.id === o.invoiceId);
-
-      return {
+      // Ensure required properties are present to match the Order type
+      const order: Order = {
         ...o,
         id: o.id,
         maskedId: maskedId,
         customer: customerData,
         invoiceId: relatedInvoice?.id,
         invoiceMaskedId: relatedInvoice?.maskedId,
+        items: o.items as any, // Cast items to avoid strict type mismatch if defined differently
         deliveryDate:
           o.deliveryDate instanceof Timestamp
             ? o.deliveryDate.toDate().toISOString().split('T')[0]
             : String(o.deliveryDate),
       };
+      return order;
     })
     .filter((order): order is Order => order !== null)
     .sort((a, b) => {

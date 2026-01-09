@@ -16,23 +16,23 @@ export interface FirestoreAccount {
 }
 
 export type Permission = {
-    read: boolean;
-    write: boolean;
-    delete: boolean;
+  read: boolean;
+  write: boolean;
+  delete: boolean;
 };
 
 export type PermissionsMap = {
-    orders: Permission;
-    inventory: Permission;
-    reports: Permission;
-    users: Permission;
-    pos: Permission;
-    repairs: Permission;
-    customers: Permission;
-    invoices: Permission;
-    settings: Permission;
-    customization: Permission;
-    purchaseOrders: Permission;
+  orders: Permission;
+  inventory: Permission;
+  reports: Permission;
+  users: Permission;
+  pos: Permission;
+  repairs: Permission;
+  customers: Permission;
+  invoices: Permission;
+  settings: Permission;
+  customization: Permission;
+  purchaseOrders: Permission;
 };
 
 export interface FirestoreRole {
@@ -51,16 +51,16 @@ export interface FirestoreMembership {
 }
 
 export interface FirestoreInvitation {
-    accountId: string;
-    invitedEmail: string;
-    invitedBy: string;
-    roleId: string;
-    status: 'pending' | 'accepted' | 'expired';
-    type: 'google' | 'manual';
-    createdAt: Timestamp;
-    expiresAt: Timestamp;
-    acceptToken: string;
-    acceptedAt?: Timestamp;
+  accountId: string;
+  invitedEmail: string;
+  invitedBy: string;
+  roleId: string;
+  status: 'pending' | 'accepted' | 'expired';
+  type: 'google' | 'manual';
+  createdAt: Timestamp;
+  expiresAt: Timestamp;
+  acceptToken: string;
+  acceptedAt?: Timestamp;
 }
 
 export type SalaryType = 'HOURLY' | 'SALARY';
@@ -160,10 +160,10 @@ export interface FirestoreInventoryItem {
 }
 
 export interface FirestoreTimesheetEntry {
-    userId: string;
-    startTime: Timestamp;
-    endTime?: Timestamp | null;
-    notes?: string;
+  userId: string;
+  startTime: Timestamp;
+  endTime?: Timestamp | null;
+  notes?: string;
 }
 
 export interface PurchaseOrderItem {
@@ -218,6 +218,7 @@ export type Order = WithId<FirestoreOrder> & {
   invoiceId?: string;
   invoiceMaskedId?: string;
   items?: WithId<OrderItem>[];
+  deliveryDate: string;
 };
 
 export type Invoice = WithId<FirestoreInvoice> & {
@@ -264,7 +265,7 @@ export type KpiData = {
 export type InventoryItem = WithId<FirestoreInventoryItem>;
 
 export type TimesheetEntry = WithId<FirestoreTimesheetEntry> & {
-    duration?: string;
+  duration?: string;
 };
 
 export type InvoiceStatus = 'Paid' | 'Pending' | 'Overdue' | 'Partially Paid';
