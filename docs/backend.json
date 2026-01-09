@@ -1,0 +1,421 @@
+{
+  "entities": {
+    "Account": {
+      "title": "Account",
+      "type": "object",
+      "description": "Represents an organization's account, which contains all of its data.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the organization or account."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "The UID of the user who owns the account."
+        }
+      },
+      "required": ["name", "ownerId"]
+    },
+    "Role": {
+      "title": "Role",
+      "type": "object",
+      "description": "Defines a set of permissions within an account.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the role (e.g., 'Admin', 'Tailor')."
+        },
+        "hierarchy": {
+          "type": "number",
+          "description": "A number representing the role's level in the hierarchy (0 is highest)."
+        },
+        "isDefault": {
+          "type": "boolean",
+          "description": "Whether this is a default role that cannot be deleted."
+        },
+        "permissions": {
+          "type": "object",
+          "properties": {
+            "orders": { "type": "object", "properties": { "read": {"type": "boolean"}, "write": {"type": "boolean"}, "delete": {"type": "boolean"} } },
+            "inventory": { "type": "object", "properties": { "read": {"type": "boolean"}, "write": {"type": "boolean"}, "delete": {"type": "boolean"} } },
+            "reports": { "type": "object", "properties": { "read": {"type": "boolean"}, "write": {"type": "boolean"}, "delete": {"type": "boolean"} } },
+            "users": { "type": "object", "properties": { "read": {"type": "boolean"}, "write": {"type": "boolean"}, "delete": {"type": "boolean"} } },
+            "pos": { "type": "object", "properties": { "read": {"type": "boolean"}, "write": {"type": "boolean"}, "delete": {"type": "boolean"} } },
+            "repairs": { "type": "object", "properties": { "read": {"type": "boolean"}, "write": {"type": "boolean"}, "delete": {"type": "boolean"} } },
+            "customers": { "type": "object", "properties": { "read": {"type": "boolean"}, "write": {"type": "boolean"}, "delete": {"type": "boolean"} } },
+            "invoices": { "type": "object", "properties": { "read": {"type": "boolean"}, "write": {"type": "boolean"}, "delete": {"type": "boolean"} } },
+            "settings": { "type": "object", "properties": { "read": {"type": "boolean"}, "write": {"type": "boolean"}, "delete": {"type": "boolean"} } },
+            "customization": { "type": "object", "properties": { "read": {"type": "boolean"}, "write": {"type": "boolean"}, "delete": {"type": "boolean"} } },
+            "purchaseOrders": { "type": "object", "properties": { "read": {"type": "boolean"}, "write": {"type": "boolean"}, "delete": {"type": "boolean"} } }
+          }
+        }
+      },
+      "required": ["name", "hierarchy", "permissions"]
+    },
+    "Membership": {
+      "title": "Membership",
+      "type": "object",
+      "description": "Links a user to an account with a specific role.",
+      "properties": {
+        "invitedBy": {
+          "type": "string",
+          "description": "The UID of the user who sent the invitation."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["invited", "accepted", "disabled"]
+        },
+        "roleId": {
+          "type": "string",
+          "description": "A reference to the role document in the account's 'roles' sub-collection."
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "displayName": {
+          "type": "string"
+        }
+      },
+      "required": ["invitedBy", "status", "roleId", "email"]
+    },
+    "Invitation": {
+        "title": "Invitation",
+        "type": "object",
+        "description": "Represents an invitation for a user to join an account.",
+        "properties": {
+            "accountId": { "type": "string" },
+            "invitedEmail": { "type": "string", "format": "email" },
+            "invitedBy": { "type": "string" },
+            "roleId": { "type": "string" },
+            "status": { "type": "string", "enum": ["pending", "accepted", "expired"] },
+            "type": { "type": "string", "enum": ["google", "manual"] },
+            "expiresAt": { "type": "string", "format": "date-time" },
+            "acceptToken": { "type": "string" }
+        },
+        "required": ["accountId", "invitedEmail", "invitedBy", "roleId", "status", "type"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "type": "object",
+      "description": "Represents the public profile of an application user, mirroring Firebase Auth data.",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user."
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "URL to the user's profile picture."
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "User's mobile phone number."
+        },
+        "accessPin": {
+          "type": "string",
+          "description": "A hashed 4-6 digit PIN for POS access."
+        },
+        "pinSetAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the access PIN was last set."
+        },
+        "salaryType": {
+            "type": "string",
+            "enum": ["HOURLY", "SALARY"],
+            "description": "The user's salary type."
+        },
+        "hourlyRate": {
+            "type": "number",
+            "description": "The user's hourly rate, if applicable."
+        },
+        "baseSalary": {
+            "type": "number",
+            "description": "The user's base salary, if applicable."
+        }
+      },
+      "required": [
+        "email"
+      ]
+    },
+    "Customer": {
+      "title": "Customer",
+      "type": "object",
+      "description": "Represents a customer placing orders or requesting repairs.",
+      "properties": {
+        "firstName": {
+          "type": "string"
+        },
+        "lastName": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "imageHint": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "firstName",
+        "lastName",
+        "email"
+      ]
+    },
+    "OrderItem": {
+      "title": "Order Item",
+      "type": "object",
+      "description": "Represents a single item within a repair order.",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "details": { "type": "string" },
+        "materials": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": { "id": { "type": "string" }, "name": { "type": "string" }},
+            "required": ["id", "name"]
+          }
+        },
+        "price": { "type": "number" },
+        "quantity": { "type": "number" },
+        "fulfillmentStatus": { "type": "string", "enum": ["Fulfilled", "Backordered", "Returned"] }
+      },
+      "required": ["id", "name", "price", "quantity"]
+    },
+    "Order": {
+      "title": "Order",
+      "type": "object",
+      "description": "Represents an order placed by a customer.",
+      "properties": {
+        "customerId": { "type": "string" },
+        "type": { "type": "string", "enum": ["Order", "Repair", "Shipped"] },
+        "deliveryDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["Placed", "In Progress", "Completed", "Shipped", "Partially Fulfilled"] },
+        "amount": { "type": "number" },
+        "items": { "type": "array", "items": { "$ref": "#/backend/entities/OrderItem" }}
+      },
+      "required": ["customerId", "type", "deliveryDate", "status", "amount"]
+    },
+    "Inventory": {
+      "title": "Inventory",
+      "type": "object",
+      "description": "Represents an item in the inventory.",
+      "properties": {
+        "name": { "type": "string" },
+        "stock": { "type": "number" },
+        "onOrder": { "type": "number" },
+        "reorderLevel": { "type": "number" },
+        "category": { "type": "string" },
+        "supplier": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "imageHint": { "type": "string" },
+        "retailPrice": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "showInPOS": { "type": "boolean" }
+      },
+      "required": ["name", "stock", "reorderLevel", "category", "supplier", "retailPrice", "costPrice"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "type": "object",
+      "description": "Represents an invoice for a customer.",
+      "properties": {
+        "customerId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["Paid", "Pending", "Overdue", "Partially Paid"] },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "quantity": { "type": "number" },
+              "price": { "type": "number" },
+              "total": { "type": "number" }
+            },
+            "required": ["id", "name", "quantity", "price", "total"]
+          }
+        },
+        "subtotal": { "type": "number" },
+        "tax": { "type": "number" },
+        "total": { "type": "number" }
+      },
+      "required": ["customerId", "date", "dueDate", "status", "items", "subtotal", "tax", "total"]
+    },
+    "TimesheetEntry": {
+      "title": "Timesheet Entry",
+      "type": "object",
+      "description": "Represents a single timesheet entry for a user.",
+      "properties": {
+        "userId": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      },
+      "required": ["userId", "startTime"]
+    },
+    "PurchaseOrderItem": {
+      "title": "Purchase Order Item",
+      "type": "object",
+      "description": "Represents a single item within a purchase order.",
+      "properties": {
+        "inventoryItemId": { "type": "string" },
+        "name": { "type": "string" },
+        "quantity": { "type": "number" },
+        "cost": { "type": "number" },
+        "receivedQuantity": { "type": "number" }
+      },
+      "required": ["inventoryItemId", "name", "quantity", "cost"]
+    },
+    "ReceptionItem": {
+        "title": "Reception Item",
+        "type": "object",
+        "description": "An item received as part of a goods reception event.",
+        "properties": {
+            "inventoryItemId": { "type": "string" },
+            "name": { "type": "string" },
+            "quantityReceived": { "type": "number" }
+        },
+        "required": ["inventoryItemId", "name", "quantityReceived"]
+    },
+    "Reception": {
+        "title": "Reception (GRN)",
+        "type": "object",
+        "description": "A record of a single goods reception event (a GRN).",
+        "properties": {
+            "id": { "type": "string" },
+            "date": { "type": "string", "format": "date-time" },
+            "items": { "type": "array", "items": { "$ref": "#/backend/entities/ReceptionItem" } },
+            "notes": { "type": "string" }
+        },
+        "required": ["id", "date", "items"]
+    },
+    "PurchaseOrder": {
+      "title": "Purchase Order",
+      "type": "object",
+      "description": "Represents a purchase order to a supplier.",
+      "properties": {
+        "supplier": { "type": "string" },
+        "orderDate": { "type": "string", "format": "date-time" },
+        "expectedDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["Draft", "Ordered", "Partially Received", "Received", "Cancelled"] },
+        "totalCost": { "type": "number" },
+        "items": { "type": "array", "items": { "$ref": "#/backend/entities/PurchaseOrderItem" }},
+        "receptions": { "type": "array", "items": { "$ref": "#/backend/entities/Reception" }}
+      },
+      "required": ["supplier", "orderDate", "status", "totalCost", "items"]
+    }
+  },
+  "auth": {
+    "providers": ["password", "google.com"]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/accounts/{accountId}",
+        "definition": {
+          "entityName": "Account",
+          "schema": { "$ref": "#/backend/entities/Account" },
+          "description": "Top-level documents for each organization account."
+        }
+      },
+      {
+        "path": "/accounts/{accountId}/roles/{roleId}",
+        "definition": {
+          "entityName": "Role",
+          "schema": { "$ref": "#/backend/entities/Role" },
+          "description": "Permission roles defined within an account."
+        }
+      },
+      {
+        "path": "/accounts/{accountId}/memberships/{userId}",
+        "definition": {
+          "entityName": "Membership",
+          "schema": { "$ref": "#/backend/entities/Membership" },
+          "description": "Links users to accounts with specific roles."
+        }
+      },
+      {
+        "path": "/accounts/{accountId}/customers/{customerId}",
+        "definition": {
+          "entityName": "Customer",
+          "schema": { "$ref": "#/backend/entities/Customer" },
+          "description": "Customer data belonging to an account."
+        }
+      },
+      {
+        "path": "/accounts/{accountId}/orders/{orderId}",
+        "definition": {
+          "entityName": "Order",
+          "schema": { "$ref": "#/backend/entities/Order" },
+          "description": "Order data belonging to an account."
+        }
+      },
+      {
+        "path": "/accounts/{accountId}/inventory/{inventoryId}",
+        "definition": {
+          "entityName": "Inventory",
+          "schema": { "$ref": "#/backend/entities/Inventory" },
+          "description": "Inventory data belonging to an account."
+        }
+      },
+      {
+        "path": "/accounts/{accountId}/invoices/{invoiceId}",
+        "definition": {
+          "entityName": "Invoice",
+          "schema": { "$ref": "#/backend/entities/Invoice" },
+          "description": "Invoice data belonging to an account."
+        }
+      },
+      {
+        "path": "/accounts/{accountId}/timesheet/{entryId}",
+        "definition": {
+          "entityName": "TimesheetEntry",
+          "schema": { "$ref": "#/backend/entities/TimesheetEntry" },
+          "description": "Timesheet data belonging to an account."
+        }
+      },
+      {
+        "path": "/accounts/{accountId}/purchaseOrders/{poId}",
+        "definition": {
+          "entityName": "PurchaseOrder",
+          "schema": { "$ref": "#/backend/entities/PurchaseOrder" },
+          "description": "Purchase order data belonging to an account."
+        }
+      },
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": { "$ref": "#/backend/entities/UserProfile" },
+          "description": "Top-level public profiles for all users."
+        }
+      },
+      {
+        "path": "/invitations/{invitationId}",
+        "definition": {
+          "entityName": "Invitation",
+          "schema": { "$ref": "#/backend/entities/Invitation" },
+          "description": "Invitations for users to join an account."
+        }
+      }
+    ]
+  }
+}

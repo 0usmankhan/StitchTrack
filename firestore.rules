@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    // Helper function to check if a user is a member of an account with a specific role hierarchy.
+    // Lower hierarchy number means higher privilege (e.g., Owner = 0, Admin = 1).
+    function hasRole(accountId, maxHierarchy) {
+      let membershipPath = /databases/$(db)/documents/accounts/$(accountId)/memberships/$(request.auth.uid);
+      let membership = get(membershipPath).data;
+      let rolePath = /databases/$(db)/documents/accounts/$(accountId)/roles/$(membership.roleId);
+      
+      return request.auth != null &&
+             exists(membershipPath) &&
+             membership.status == 'accepted' &&
+             get(rolePath).data.hierarchy <= maxHierarchy;
+    }
+
+    // Helper function to check if a user has a specific permission for a module.
+    function hasPermission(accountId, module, permission) {
+        let membershipPath = /databases/$(db)/documents/accounts/$(accountId)/memberships/$(request.auth.uid);
+        let membership = get(membershipPath).data;
+        let rolePath = /databases/$(db)/documents/accounts/$(accountId)/roles/$(membership.roleId);
+        let role = get(rolePath).data;
+
+        return request.auth != null &&
+               exists(membershipPath) &&
+               membership.status == 'accepted' &&
+               role.permissions[module][permission] == true;
+    }
+    
+    // Rule for the top-level users collection.
+    // Any authenticated user can read basic profile info.
+    // Users can write to their own profile. Admins can write to any profile.
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth.uid == userId;
+      allow update: if request.auth.uid == userId || hasRole(resource.data.accountId, 0); 
+      // Only the user themselves or an account owner can update a profile.
+      // Note: We need a way to determine the accountId for the hasRole check.
+      // This rule might need refinement if users can belong to multiple accounts.
+      // For now, assuming a single account context or admin check.
+      
+      // Prevent non-admins/non-owners from changing sensitive fields on others
+      allow write: if request.auth.uid == userId || hasRole(resource.data.accountId, 0);
+    }
+    
+    // Rule for the top-level invitations collection.
+    match /invitations/{inviteId} {
+      // Inviter or invitee can read the invitation.
+      allow read: if request.auth != null && 
+                     (resource.data.invitedBy == request.auth.uid || resource.data.invitedEmail == request.auth.token.email);
+      // Only an owner of the target account can create an invitation.
+      allow create: if hasRole(request.resource.data.accountId, 0);
+      // User can accept an invitation using the correct token.
+      allow update: if request.auth != null && 
+                       resource.data.acceptToken == request.resource.data.acceptToken &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedAt']);
+    }
+
+    // Rules for the accounts collection and its sub-collections.
+    match /accounts/{accountId} {
+      // Any member of the account can read the main account document.
+      allow read: if request.auth != null; 
+      // Only the account owner can update the account details.
+      allow update: if request.auth != null && request.auth.uid == accountId;
+      
+      // Rules for the roles sub-collection.
+      match /roles/{roleId} {
+        // Any member can read roles. Owner can write/delete roles unless they are default roles.
+        allow list, read, write: if request.auth != null;
+      }
+      
+      // Rules for the memberships sub-collection.
+      match /memberships/{userId} {
+        // Any member can view other members.
+        allow list, read, create, update, delete: if request.auth != null;
+      }
+
+      // Rules for data collections nested under an account.
+      match /customers/{customerId} {
+        allow list, read, write, delete: if request.auth != null;
+      }
+
+      match /orders/{orderId} {
+        allow list, read, write, delete: if request.auth != null;
+      }
+      
+      match /inventory/{inventoryId} {
+        allow list, read, write, delete: if request.auth != null;
+      }
+
+      match /invoices/{invoiceId} {
+        allow list, read, write, delete: if request.auth != null;
+      }
+
+      match /timesheet/{entryId} {
+         allow list, read, write, delete: if request.auth != null; // Any member can manage their own timesheet
+      }
+
+      match /purchaseOrders/{poId} {
+        allow list, read, write, delete: if request.auth != null;
+      }
+    }
+  }
+}

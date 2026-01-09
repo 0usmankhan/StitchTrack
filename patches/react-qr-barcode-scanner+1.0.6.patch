@@ -1,0 +1,12 @@
+diff --git a/node_modules/react-qr-barcode-scanner/package.json b/node_modules/react-qr-barcode-scanner/package.json
+index 351a02b..83c076c 100644
+--- a/node_modules/react-qr-barcode-scanner/package.json
++++ b/node_modules/react-qr-barcode-scanner/package.json
+@@ -64,6 +64,6 @@
+     "react-dom": "^16.13.1"
+   },
+   "peerDependencies": {
+-    "react": "^16.13.1"
++    "react": "^16.13.1 || ^17.0.0 || ^18.0.0"
+   }
+ }

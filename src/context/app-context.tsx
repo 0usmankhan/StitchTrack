@@ -1,0 +1,787 @@
+'use client';
+import React, { createContext, useContext, ReactNode, useMemo } from 'react';
+import {
+  collection,
+  addDoc,
+  doc,
+  updateDoc,
+  Timestamp,
+  writeBatch,
+  DocumentReference,
+  setDoc,
+  query,
+  where,
+  limit,
+  orderBy,
+  deleteDoc,
+  runTransaction,
+  increment,
+  arrayUnion,
+} from 'firebase/firestore';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import type {
+  Customer,
+  Order,
+  Invoice,
+  InventoryItem,
+  FirestoreCustomer,
+  FirestoreOrder,
+  FirestoreInvoice,
+  FirestoreInventoryItem,
+  FirestoreUserProfile,
+  UserProfile,
+  TimesheetEntry,
+  FirestoreTimesheetEntry,
+  FirestoreRole,
+  AppContextType,
+  FirestoreMembership,
+  Membership,
+  Role,
+  PurchaseOrder,
+  FirestorePurchaseOrder,
+  PurchaseOrderItem,
+  Reception,
+  ReceptionItem,
+  SalaryType,
+  PermissionsMap,
+} from '@/lib/types';
+import {
+  useCollection,
+  useFirestore,
+  useMemoFirebase,
+  addDocumentNonBlocking,
+  updateDocumentNonBlocking,
+  useUser,
+  useDoc,
+  setDocumentNonBlocking,
+  useAuth,
+  deleteDocumentNonBlocking,
+  errorEmitter,
+  FirestorePermissionError,
+} from '@/firebase';
+import {
+  getCustomersCollection,
+  getInventoryCollection,
+  getInvoicesCollection,
+  getMembershipsCollection,
+  getOrdersCollection,
+  getPurchaseOrdersCollection,
+  getRolesCollection,
+  getUserDocument,
+  getTimesheetCollection,
+} from '@/lib/firestore-paths';
+import { PlaceHolderImages } from '@/lib/placeholder-images';
+import { formatDistanceStrict } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
+
+const customerAvatars = PlaceHolderImages.filter((img) =>
+  img.id.startsWith('avatar')
+);
+
+const getRandomAvatar = () => {
+  if (customerAvatars.length === 0) {
+    return {
+      imageUrl: 'https://picsum.photos/seed/avatarfallback/40/40',
+      imageHint: 'person portrait',
+    };
+  }
+  return customerAvatars[Math.floor(Math.random() * customerAvatars.length)];
+};
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+export function AppProvider({ children }: { children: ReactNode }) {
+  const firestore = useFirestore();
+  const auth = useAuth();
+  const { user } = useUser();
+  // const accountId = user?.uid; // REMOVED: Derived later
+  const { toast } = useToast();
+
+
+  /* ------------------------------------------------------------------ */
+  /*  1. Determine the correct Account ID to use (Owner vs Employee)    */
+  /* ------------------------------------------------------------------ */
+  const userDocRef = useMemoFirebase(
+    () => (firestore && user?.uid ? doc(firestore, getUserDocument(user.uid)) : null),
+    [firestore, user]
+  );
+  const { data: userProfileData } = useDoc<FirestoreUserProfile>(userDocRef);
+
+  // If the user has an associatedAccountId, they are a team member.
+  // Otherwise, they are the owner of their own account.
+  const accountId = userProfileData?.associatedAccountId || user?.uid;
+
+  /* ------------------------------------------------------------------ */
+  /*  2. Fetch Data based on the determined Account ID                  */
+  /* ------------------------------------------------------------------ */
+
+  const customersCollection = useMemoFirebase(
+    () => (firestore && accountId ? collection(firestore, getCustomersCollection(accountId)) : null),
+    [firestore, accountId]
+  );
+  const { data: customersData, isLoading: isCustomersLoading } =
+    useCollection<FirestoreCustomer>(customersCollection);
+
+  const ordersCollection = useMemoFirebase(
+    () => (firestore && accountId ? collection(firestore, getOrdersCollection(accountId)) : null),
+    [firestore, accountId]
+  );
+  const { data: ordersData } = useCollection<FirestoreOrder>(ordersCollection);
+
+  const invoicesCollection = useMemoFirebase(
+    () => (firestore && accountId ? collection(firestore, getInvoicesCollection(accountId)) : null),
+    [firestore, accountId]
+  );
+  const { data: invoicesData } =
+    useCollection<FirestoreInvoice>(invoicesCollection);
+
+  const inventoryCollection = useMemoFirebase(
+    () => (firestore && accountId ? collection(firestore, getInventoryCollection(accountId)) : null),
+    [firestore, accountId]
+  );
+  const { data: inventoryData } =
+    useCollection<InventoryItem>(inventoryCollection);
+
+  const purchaseOrdersCollection = useMemoFirebase(
+    () => (firestore && accountId ? collection(firestore, getPurchaseOrdersCollection(accountId)) : null),
+    [firestore, accountId]
+  );
+  const { data: purchaseOrdersData } = useCollection<FirestorePurchaseOrder>(purchaseOrdersCollection);
+
+  const timesheetCollection = useMemoFirebase(
+    () => (firestore && accountId ? collection(firestore, getTimesheetCollection(accountId)) : null),
+    [firestore, accountId]
+  );
+  const { data: timesheetData } = useCollection<FirestoreTimesheetEntry>(
+    useMemoFirebase(
+      () =>
+        timesheetCollection
+          ? query(timesheetCollection, orderBy('startTime', 'desc'))
+          : null,
+      [timesheetCollection]
+    )
+  );
+
+  const rolesCollection = useMemoFirebase(
+    () => (firestore && accountId ? collection(firestore, getRolesCollection(accountId)) : null),
+    [firestore, accountId]
+  );
+  const { data: rolesData } = useCollection<FirestoreRole>(rolesCollection);
+
+  const membershipsCollection = useMemoFirebase(
+    () => (firestore && accountId ? collection(firestore, getMembershipsCollection(accountId)) : null),
+    [firestore, accountId]
+  );
+  const { data: membershipsData } = useCollection<FirestoreMembership>(membershipsCollection);
+
+  const activeTimesheetQuery = useMemoFirebase(
+    () =>
+      timesheetCollection && user
+        ? query(timesheetCollection, where('userId', '==', user.uid), where('endTime', '==', null), limit(1))
+        : null,
+    [timesheetCollection, user]
+  );
+  const { data: activeTimesheetData } =
+    useCollection<FirestoreTimesheetEntry>(activeTimesheetQuery);
+  const activeTimesheet = useMemo(() => {
+    if (activeTimesheetData && activeTimesheetData.length > 0) {
+      const entry = activeTimesheetData[0];
+      return {
+        ...entry,
+        startTime:
+          entry.startTime instanceof Timestamp ? entry.startTime : Timestamp.now(),
+      };
+    }
+    return null;
+  }, [activeTimesheetData]);
+
+  /* ------------------------------------------------------------------ */
+  /*  3. Calculate Permissions                                         */
+  /* ------------------------------------------------------------------ */
+
+  const permissions: PermissionsMap = useMemo(() => {
+    // Default full permissions
+    const fullPermissions: PermissionsMap = {
+      orders: { read: true, write: true, delete: true },
+      inventory: { read: true, write: true, delete: true },
+      reports: { read: true, write: true, delete: true },
+      users: { read: true, write: true, delete: true },
+      pos: { read: true, write: true, delete: true },
+      repairs: { read: true, write: true, delete: true },
+      customers: { read: true, write: true, delete: true },
+      invoices: { read: true, write: true, delete: true },
+      settings: { read: true, write: true, delete: true },
+      customization: { read: true, write: true, delete: true },
+      purchaseOrders: { read: true, write: true, delete: true },
+    };
+
+    // If no user or data yet, default to full access (safest fallback for owner, strictly guarded by auth anyway)
+    // Or strictly: if (user?.uid === accountId) return fullPermissions;
+    if (!user || !rolesData || !membershipsData) return fullPermissions;
+
+    // If I am the owner (my uid matches the accountId I'm viewing), I have full control.
+    if (user.uid === accountId) {
+      return fullPermissions;
+    }
+
+    // Otherwise, find my membership in this account
+    const myMembership = membershipsData.find(m => m.id === user.uid);
+    if (!myMembership) return fullPermissions; // Fallback or restricted? Let's keep valid for now.
+
+    const myRole = rolesData.find(r => r.id === myMembership.roleId);
+    if (!myRole) return fullPermissions;
+
+    return myRole.permissions;
+  }, [user, accountId, rolesData, membershipsData]);
+
+  const updateUserProfile = async (profile: Partial<FirestoreUserProfile>) => {
+    if (!firestore || !user?.uid) return; // Update: ensure we use user.uid
+    const userDoc = doc(firestore, getUserDocument(user.uid));
+
+    let updateData = { ...profile };
+
+    if (profile.accessPin) {
+      try {
+        const response = await fetch('/api/auth/hash-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: profile.accessPin }),
+        });
+        const { hashedPin, error } = await response.json();
+        if (error) {
+          throw new Error(error);
+        }
+        updateData.accessPin = hashedPin;
+        updateData.pinSetAt = Timestamp.now();
+      } catch (error: any) {
+        toast({
+          variant: "destructive",
+          title: "PIN Error",
+          description: error.message || 'Failed to set PIN. Must be 4-6 digits.',
+        });
+        return;
+      }
+    }
+
+    setDocumentNonBlocking(userDoc, updateData, { merge: true });
+  };
+
+  const addUser = async (
+    email: string,
+    password_DO_NOT_USE: string,
+    roleId: string,
+    displayName: string,
+    pin?: string,
+    salaryType?: SalaryType,
+    salaryAmount?: number
+  ) => {
+    if (!auth || !firestore || !accountId) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Firebase not initialized.",
+      });
+      return;
+    }
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password_DO_NOT_USE);
+      const newUserId = userCredential.user.uid;
+
+      const newMembership: FirestoreMembership = {
+        email,
+        roleId,
+        displayName: displayName || email,
+        status: 'accepted',
+        invitedBy: accountId,
+      };
+
+      const membershipDocRef = doc(firestore, getMembershipsCollection(accountId), newUserId);
+      await setDoc(membershipDocRef, newMembership);
+
+      // Now create the user profile with the link to the main account
+      let userProfile: FirestoreUserProfile = {
+        email,
+        associatedAccountId: accountId // <--- LINK TO MAIN ACCOUNT
+      };
+      if (pin) {
+        try {
+          const response = await fetch('/api/auth/hash-pin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pin }),
+          });
+          const { hashedPin, error } = await response.json();
+          if (error) throw new Error(error);
+          userProfile.accessPin = hashedPin;
+          userProfile.pinSetAt = Timestamp.now();
+        } catch (error: any) {
+          toast({ variant: 'destructive', title: 'PIN Error', description: error.message });
+          // Continue creating user without PIN
+        }
+      }
+      if (salaryType && salaryAmount) {
+        userProfile.salaryType = salaryType;
+        if (salaryType === 'HOURLY') userProfile.hourlyRate = salaryAmount;
+        if (salaryType === 'SALARY') userProfile.baseSalary = salaryAmount;
+      }
+
+      const userDocRef = doc(firestore, getUserDocument(newUserId));
+      await setDoc(userDocRef, userProfile, { merge: true });
+
+      toast({
+        title: 'User Created',
+        description: `${displayName || email} has been successfully added.`,
+      });
+
+    } catch (error: any) {
+      console.error("Error creating user:", error);
+      toast({
+        variant: "destructive",
+        title: "Failed to create user",
+        description: error.message || "An unexpected error occurred.",
+      });
+    }
+  };
+
+  const deleteMembership = (membershipId: string) => {
+    if (!firestore || !accountId) return;
+    const batch = writeBatch(firestore);
+
+    // Delete membership document
+    const membershipDocRef = doc(firestore, getMembershipsCollection(accountId), membershipId);
+    batch.delete(membershipDocRef);
+
+    // Delete user profile document
+    const userDocRef = doc(firestore, getUserDocument(membershipId));
+    batch.delete(userDocRef);
+
+    batch.commit();
+  };
+
+  const addCustomer = async (
+    customer: Omit<FirestoreCustomer, 'totalOrders' | 'totalSpent'>
+  ) => {
+    if (!firestore || !accountId) return;
+    const customerCollection = collection(firestore, getCustomersCollection(accountId));
+    const newCustomer: FirestoreCustomer = {
+      ...customer,
+    };
+    await addDocumentNonBlocking(customerCollection, newCustomer);
+  };
+
+  const updateCustomer = (
+    customerId: string,
+    customer: Partial<FirestoreCustomer>
+  ) => {
+    if (!firestore || !accountId) return;
+    const customerDocRef = doc(firestore, getCustomersCollection(accountId), customerId);
+    updateDocumentNonBlocking(customerDocRef, customer);
+  };
+
+  const addOrder = async (order: Omit<FirestoreOrder, 'id'>) => {
+    if (!firestore || !accountId) return;
+    const orderCollection = collection(firestore, getOrdersCollection(accountId));
+    return addDocumentNonBlocking(orderCollection, order);
+  };
+
+  const updateOrder = (orderId: string, order: Partial<FirestoreOrder>) => {
+    if (!firestore || !accountId) return;
+    const orderDocRef = doc(firestore, getOrdersCollection(accountId), orderId);
+    updateDocumentNonBlocking(orderDocRef, order);
+  };
+
+  const deleteOrders = (orderIds: string[]) => {
+    if (!firestore || !accountId) return;
+    const batch = writeBatch(firestore);
+    orderIds.forEach((id) => {
+      const orderDocRef = doc(firestore, getOrdersCollection(accountId), id);
+      batch.delete(orderDocRef);
+    });
+    batch.commit();
+  };
+
+  const addInvoice = async (invoice: Omit<FirestoreInvoice, 'id'>) => {
+    if (!firestore || !accountId) return '';
+    const invoiceCollection = collection(firestore, getInvoicesCollection(accountId));
+    const docRef = await addDoc(invoiceCollection, invoice);
+
+    if (docRef.id && invoice.items) {
+      const batch = writeBatch(firestore);
+      invoice.items.forEach((item) => {
+        if (item.orderId) {
+          const orderRef = doc(
+            firestore,
+            getOrdersCollection(accountId),
+            item.orderId
+          );
+          batch.update(orderRef, { invoiceId: docRef.id });
+        }
+      });
+      await batch.commit();
+    }
+    return docRef.id;
+  };
+
+  const updateInvoice = (
+    invoiceId: string,
+    invoice: Partial<FirestoreInvoice>
+  ) => {
+    if (!firestore || !accountId) return;
+    const invoiceDocRef = doc(firestore, getInvoicesCollection(accountId), invoiceId);
+    updateDocumentNonBlocking(invoiceDocRef, invoice);
+  };
+
+  const deleteInvoices = (invoiceIds: string[]) => {
+    if (!firestore || !accountId) return;
+    const batch = writeBatch(firestore);
+    invoiceIds.forEach((id) => {
+      const invoiceDocRef = doc(firestore, getInvoicesCollection(accountId), id);
+      batch.delete(invoiceDocRef);
+    });
+    batch.commit();
+  };
+
+  const addInventoryItem = async (item: FirestoreInventoryItem) => {
+    if (!firestore || !accountId) return;
+    const inventoryCollectionRef = collection(
+      firestore,
+      getInventoryCollection(accountId)
+    );
+    await addDocumentNonBlocking(inventoryCollectionRef, item);
+  };
+
+  const updateInventoryItem = async (
+    itemId: string,
+    item: Partial<FirestoreInventoryItem>
+  ) => {
+    if (!firestore || !accountId) return;
+    const itemDocRef = doc(firestore, getInventoryCollection(accountId), itemId);
+    updateDocumentNonBlocking(itemDocRef, item);
+  };
+
+  const deleteInventoryItems = (itemIds: string[]) => {
+    if (!firestore || !accountId) return;
+    const batch = writeBatch(firestore);
+    itemIds.forEach((id) => {
+      const itemDocRef = doc(firestore, getInventoryCollection(accountId), id);
+      batch.delete(itemDocRef);
+    });
+    batch.commit();
+  };
+
+  const addPurchaseOrder = async (po: Omit<FirestorePurchaseOrder, 'id'>) => {
+    if (!firestore || !accountId) return '';
+    const poCollection = collection(firestore, getPurchaseOrdersCollection(accountId));
+    const docRef = await addDocumentNonBlocking(poCollection, po);
+    return docRef?.id || '';
+  };
+
+  const updatePurchaseOrder = (poId: string, po: Partial<FirestorePurchaseOrder>) => {
+    if (!firestore || !accountId) return;
+    const poDocRef = doc(firestore, getPurchaseOrdersCollection(accountId), poId);
+    updateDocumentNonBlocking(poDocRef, po);
+  };
+
+  const receivePurchaseOrderItems = async (poId: string, receivedItems: { inventoryItemId: string, name: string, quantityReceived: number }[], notes?: string) => {
+    if (!firestore || !accountId) return;
+
+    try {
+      await runTransaction(firestore, async (transaction) => {
+        const poDocRef = doc(firestore, getPurchaseOrdersCollection(accountId), poId);
+        const poDoc = await transaction.get(poDocRef);
+
+        if (!poDoc.exists()) {
+          throw new Error("Purchase Order not found!");
+        }
+
+        // Create a new reception record (GRN)
+        const newReception: Reception = {
+          id: `rec-${Date.now()}`,
+          date: Timestamp.now(),
+          items: receivedItems.map(item => ({
+            inventoryItemId: item.inventoryItemId,
+            name: item.name,
+            quantityReceived: item.quantityReceived,
+          })),
+          notes: notes,
+        };
+
+        const poData = poDoc.data() as FirestorePurchaseOrder;
+        const updatedItems: PurchaseOrderItem[] = [...poData.items];
+        let allItemsNowReceived = true;
+
+        for (const received of receivedItems) {
+          if (received.quantityReceived > 0) {
+            const inventoryItemRef = doc(firestore, getInventoryCollection(accountId), received.inventoryItemId);
+            transaction.update(inventoryItemRef, { stock: increment(received.quantityReceived) });
+          }
+
+          const itemIndex = updatedItems.findIndex(item => item.inventoryItemId === received.inventoryItemId);
+          if (itemIndex > -1) {
+            const currentReceived = updatedItems[itemIndex].receivedQuantity || 0;
+            updatedItems[itemIndex].receivedQuantity = currentReceived + received.quantityReceived;
+          }
+        }
+
+        for (const item of updatedItems) {
+          const totalReceived = item.receivedQuantity || 0;
+          if (totalReceived < item.quantity) {
+            allItemsNowReceived = false;
+          }
+        }
+
+        const newStatus = allItemsNowReceived ? 'Received' : 'Partially Received';
+
+        transaction.update(poDocRef, {
+          items: updatedItems,
+          status: newStatus,
+          receptions: arrayUnion(newReception)
+        });
+      });
+    } catch (e) {
+      console.error("Transaction failed: ", e);
+      toast({
+        variant: "destructive",
+        title: "Error Receiving Items",
+        description: "Could not update inventory. Please try again."
+      });
+    }
+  };
+
+  const clockIn = () => {
+    if (!firestore || !accountId || activeTimesheet) return;
+    const timesheetCollectionRef = collection(
+      firestore,
+      getTimesheetCollection(accountId)
+    );
+    const newEntry: Omit<FirestoreTimesheetEntry, 'id'> = {
+      userId: user!.uid,
+      startTime: Timestamp.now(),
+      endTime: null,
+      notes: '',
+    };
+    addDocumentNonBlocking(timesheetCollectionRef, newEntry);
+  };
+
+  const clockOut = (entryId: string, notes: string) => {
+    if (!firestore || !accountId) return;
+    const entryDocRef = doc(firestore, getTimesheetCollection(accountId), entryId);
+    updateDocumentNonBlocking(entryDocRef, {
+      endTime: Timestamp.now(),
+      notes: notes,
+    });
+  };
+
+  const addRole = (roleName: string) => {
+    if (!firestore || !accountId) return;
+    const rolesCol = collection(firestore, getRolesCollection(accountId));
+    const highestHierarchy = Math.max(...(rolesData?.map(r => r.hierarchy) || [0]));
+
+    const newRole: FirestoreRole = {
+      name: roleName,
+      hierarchy: highestHierarchy + 1,
+      isDefault: false,
+      permissions: {
+        orders: { read: false, write: false, delete: false },
+        inventory: { read: false, write: false, delete: false },
+        reports: { read: false, write: false, delete: false },
+        users: { read: false, write: false, delete: false },
+        pos: { read: false, write: false, delete: false },
+        repairs: { read: false, write: false, delete: false },
+        customers: { read: false, write: false, delete: false },
+        invoices: { read: false, write: false, delete: false },
+        settings: { read: false, write: false, delete: false },
+        customization: { read: false, write: false, delete: false },
+        purchaseOrders: { read: false, write: false, delete: false },
+      },
+    };
+    addDocumentNonBlocking(rolesCol, newRole);
+  };
+
+  const updateRole = (roleId: string, data: Partial<FirestoreRole>) => {
+    if (!firestore || !accountId) return;
+    const roleDocRef = doc(firestore, getRolesCollection(accountId), roleId);
+    updateDocumentNonBlocking(roleDocRef, data);
+  };
+
+  const customers: Customer[] = (customersData || []).map((c) => ({
+    ...c,
+    id: c.id,
+    name: `${c.firstName} ${c.lastName}`,
+  }));
+
+  const invoices: Invoice[] = (invoicesData || []).map((i, index) => {
+    const customer = customers.find((c) => c.id === i.customerId);
+    const randomAvatar = getRandomAvatar();
+    const maskedId = `INV-${index + 1}`;
+    return {
+      ...i,
+      id: i.id,
+      maskedId: maskedId,
+      customer: customer || {
+        id: 'unknown',
+        name: 'Unknown Customer',
+        email: '',
+        avatar: randomAvatar.imageUrl,
+        imageHint: randomAvatar.imageHint,
+        firstName: 'Unknown',
+        lastName: 'Customer',
+        phone: '',
+      },
+      date:
+        i.date instanceof Timestamp
+          ? i.date.toDate().toISOString()
+          : String(i.date),
+      dueDate:
+        i.dueDate instanceof Timestamp
+          ? i.dueDate.toDate().toISOString()
+          : String(i.dueDate),
+    };
+  });
+
+  const orders: Order[] = (ordersData || [])
+    .map((o, index) => {
+      const customer = customers.find((c) => c.id === o.customerId);
+      if (!customer && o.customerId !== 'walk-in') {
+        return null;
+      }
+      const randomAvatar = getRandomAvatar();
+      const customerData =
+        customer || {
+          id: 'walk-in',
+          name: 'Walk-in Customer',
+          email: '',
+          avatar: randomAvatar.imageUrl,
+          imageHint: randomAvatar.imageHint,
+          firstName: 'Walk-in',
+          lastName: 'Customer',
+          phone: '',
+        };
+
+      const maskedId = `${o.type === 'Repair' ? 'R' : 'O'}-${index + 1}`;
+
+      const relatedInvoice = invoices.find((inv) => inv.id === o.invoiceId);
+
+      return {
+        ...o,
+        id: o.id,
+        maskedId: maskedId,
+        customer: customerData,
+        invoiceId: relatedInvoice?.id,
+        invoiceMaskedId: relatedInvoice?.maskedId,
+        deliveryDate:
+          o.deliveryDate instanceof Timestamp
+            ? o.deliveryDate.toDate().toISOString().split('T')[0]
+            : String(o.deliveryDate),
+      };
+    })
+    .filter((order): order is Order => order !== null)
+    .sort((a, b) => {
+      try {
+        const aDate = Date.parse(a.deliveryDate);
+        const bDate = Date.parse(b.deliveryDate);
+        return bDate - aDate;
+      } catch (e) {
+        return 0;
+      }
+    });
+
+  const inventory: InventoryItem[] = inventoryData || [];
+
+  const purchaseOrders: PurchaseOrder[] = (purchaseOrdersData || []).map((po, index) => ({
+    ...po,
+    id: po.id,
+    maskedId: `PO-${index + 1}`,
+    orderDate: po.orderDate instanceof Timestamp ? po.orderDate.toDate().toISOString() : String(po.orderDate),
+    expectedDate: po.expectedDate instanceof Timestamp ? po.expectedDate.toDate().toISOString() : String(po.expectedDate),
+  }));
+
+  const timesheetEntries: TimesheetEntry[] = (timesheetData || []).map(
+    (entry) => {
+      let duration;
+      if (entry.endTime) {
+        duration = formatDistanceStrict(
+          entry.endTime.toDate(),
+          entry.startTime.toDate()
+        );
+      }
+      return {
+        ...entry,
+        duration,
+      };
+    }
+  );
+
+  const roles: Role[] = useMemo(() => {
+    const userCounts: Record<string, number> = {};
+    if (membershipsData) {
+      for (const membership of membershipsData) {
+        userCounts[membership.roleId] = (userCounts[membership.roleId] || 0) + 1;
+      }
+    }
+    return rolesData?.map(role => ({ ...role, userCount: userCounts[role.id] || 0 })) || [];
+  }, [rolesData, membershipsData]);
+
+  const memberships: Membership[] = useMemo(() => {
+    const rolesMap = new Map(rolesData?.map(r => [r.id, r.name]));
+    return (
+      membershipsData?.map((m) => {
+        return {
+          ...m,
+          roleName: rolesMap.get(m.roleId) || 'Unknown Role',
+        };
+      }) || []
+    );
+  }, [membershipsData, rolesData]);
+
+
+  return (
+    <AppContext.Provider
+      value={{
+        userProfile: userProfileData as UserProfile,
+        updateUserProfile,
+        customers,
+        isCustomersLoading,
+        addCustomer,
+        updateCustomer,
+        orders,
+        addOrder,
+        updateOrder,
+        deleteOrders,
+        invoices,
+        addInvoice,
+        updateInvoice,
+        deleteInvoices,
+        inventory,
+        addInventoryItem,
+        updateInventoryItem,
+        deleteInventoryItems,
+        purchaseOrders,
+        addPurchaseOrder,
+        updatePurchaseOrder,
+        receivePurchaseOrderItems,
+        timesheetEntries,
+        activeTimesheet,
+        clockIn,
+        clockOut,
+        roles,
+        addRole,
+        updateRole,
+        memberships,
+        addUser,
+        deleteMembership,
+        permissions,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
+}
+
+export function useApp() {
+  const context = useContext(AppContext);
+  if (context === undefined) {
+    throw new Error('useApp must be used within an AppProvider');
+  }
+  return context;
+}

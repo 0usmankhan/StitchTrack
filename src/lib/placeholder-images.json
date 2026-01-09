@@ -1,0 +1,58 @@
+{
+  "placeholderImages": [
+    {
+      "id": "avatar1",
+      "description": "User avatar 1",
+      "imageUrl": "https://picsum.photos/seed/avatar1/40/40",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "avatar2",
+      "description": "User avatar 2",
+      "imageUrl": "https://picsum.photos/seed/avatar2/40/40",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "avatar3",
+      "description": "User avatar 3",
+      "imageUrl": "https://picsum.photos/seed/avatar3/40/40",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "avatar4",
+      "description": "User avatar 4",
+      "imageUrl": "https://picsum.photos/seed/avatar4/40/40",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "avatar5",
+      "description": "User avatar 5",
+      "imageUrl": "https://picsum.photos/seed/avatar5/40/40",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "avatar6",
+      "description": "User avatar 6",
+      "imageUrl": "https://picsum.photos/seed/avatar6/40/40",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "product1",
+      "description": "Product image 1",
+      "imageUrl": "https://picsum.photos/seed/product1/400/400",
+      "imageHint": "product image"
+    },
+    {
+      "id": "product2",
+      "description": "Product image 2",
+      "imageUrl": "https://picsum.photos/seed/product2/400/400",
+      "imageHint": "product image"
+    },
+    {
+      "id": "product3",
+      "description": "Product image 3",
+      "imageUrl": "https://picsum.photos/seed/product3/400/400",
+      "imageHint": "product image"
+    }
+  ]
+}

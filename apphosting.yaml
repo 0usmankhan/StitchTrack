@@ -1,0 +1,12 @@
+# Settings to manage and configure a Firebase App Hosting backend.
+# https://firebase.google.com/docs/app-hosting/configure
+build:
+  steps:
+    - id: 'install-dependencies'
+      name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+      entrypoint: 'npm'
+      args: ['install']
+    - id: 'build-app'
+      name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+      entrypoint: 'npm'
+      args: ['run', 'build']
