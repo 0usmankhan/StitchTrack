@@ -15,9 +15,9 @@ export async function createTeamMember(
         salaryAmount?: number;
     }
 ) {
-    const { auth, firestore } = await getFirebaseAdmin();
-
     try {
+        const { auth, firestore } = await getFirebaseAdmin();
+
         // 1. Create Auth User
         const userRecord = await auth.createUser({
             email: data.email,
