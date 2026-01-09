@@ -86,18 +86,8 @@ export default function LoginPage() {
     setShowResend(false);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      if (!userCredential.user.emailVerified) {
-        await signOut(auth);
-        toast({
-            variant: 'destructive',
-            title: 'Email Not Verified',
-            description: 'Please verify your email address before logging in.',
-        });
-        setShowResend(true); // Show the resend link
-        setIsLoading(false);
-        return;
-      }
+
+
 
       toast({
         title: 'Login Successful',
@@ -147,14 +137,14 @@ export default function LoginPage() {
       }
       await signOut(auth); // Sign out immediately after
     } catch (error: any) {
-        console.error('Resend Verification Error:', error);
-        toast({
-            variant: 'destructive',
-            title: 'Failed to Resend',
-            description: 'Could not resend verification email. Please check your credentials and try again.',
-        });
+      console.error('Resend Verification Error:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Failed to Resend',
+        description: 'Could not resend verification email. Please check your credentials and try again.',
+      });
     } finally {
-        setIsResending(false);
+      setIsResending(false);
     }
   };
 
@@ -216,7 +206,7 @@ export default function LoginPage() {
                   </span>
                 </Button>
               </div>
-               {showResend && (
+              {showResend && (
                 <div className="text-sm text-center pt-2">
                   <button
                     type="button"
