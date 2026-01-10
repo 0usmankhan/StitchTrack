@@ -59,6 +59,11 @@ import { MaterialSearch } from '@/components/MaterialSearch';
 import { CustomerInvoiceSearch } from '@/components/CustomerInvoiceSearch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { useRef } from 'react';
+import { useReactToPrint } from 'react-to-print';
+import { PrintableReceipt } from '@/components/printable-receipt';
+import { StandardInvoice } from '@/components/standard-invoice';
+import { Printer } from 'lucide-react';
 
 type CartItem = {
   id: string; // Inventory ID for products, unique ID for repairs/orders
@@ -110,6 +115,27 @@ export default function PosPage() {
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   const [isCheckoutDialogOpen, setIsCheckoutDialogOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+
+  // New State for Success Dialog
+  const [isSuccessDialogOpen, setIsSuccessDialogOpen] = useState(false);
+  const [lastInvoice, setLastInvoice] = useState<Invoice | null>(null);
+
+  const receiptRef = useRef(null);
+  const standardInvoiceRef = useRef(null);
+
+  const handlePrintReceipt = useReactToPrint({
+    content: () => receiptRef.current,
+    pageStyle: `
+      @page { size: 80mm auto; margin: 0mm; } 
+      @media print { body { -webkit-print-color-adjust: exact; font-family: "Source Code Pro", monospace; } }
+    `,
+  });
+
+  const handlePrintInvoice = useReactToPrint({
+    content: () => standardInvoiceRef.current,
+    documentTitle: `Invoice-${lastInvoice?.maskedId}`,
+  });
+
   const [newCustomer, setNewCustomer] = useState({
     firstName: '',
     lastName: '',
@@ -182,17 +208,17 @@ export default function PosPage() {
       });
       return;
     }
-    
+
     for (const material of repairDetails.materials) {
-        const materialItem = inventory.find(item => item.id === material.id);
-        if (!materialItem || materialItem.stock <= 0) {
-            toast({
-                variant: "destructive",
-                title: "Material Out of Stock",
-                description: `Cannot use "${material.name}". Please adjust inventory.`,
-            });
-            return;
-        }
+      const materialItem = inventory.find(item => item.id === material.id);
+      if (!materialItem || materialItem.stock <= 0) {
+        toast({
+          variant: "destructive",
+          title: "Material Out of Stock",
+          description: `Cannot use "${material.name}". Please adjust inventory.`,
+        });
+        return;
+      }
     }
 
     const repairItem: CartItem = {
@@ -222,24 +248,24 @@ export default function PosPage() {
       });
       return;
     }
-    
+
     if (stitchOrderDetails.materialId) {
-        const materialItem = inventory.find(item => item.id === stitchOrderDetails.materialId);
-        if (!materialItem || materialItem.stock <= 0) {
-            toast({
-                variant: "destructive",
-                title: "Material Out of Stock",
-                description: `Cannot use "${stitchOrderDetails.materials}". Please adjust inventory.`,
-            });
-            return;
-        }
+      const materialItem = inventory.find(item => item.id === stitchOrderDetails.materialId);
+      if (!materialItem || materialItem.stock <= 0) {
+        toast({
+          variant: "destructive",
+          title: "Material Out of Stock",
+          description: `Cannot use "${stitchOrderDetails.materials}". Please adjust inventory.`,
+        });
+        return;
+      }
     }
 
     const stitchOrderItem: CartItem = {
       id: `stitch-${Date.now()}`,
       name: `Custom: ${stitchOrderDetails.name}`,
       details: `Measurements: ${stitchOrderDetails.measurements}`,
-      materials: stitchOrderDetails.materials ? [{id: stitchOrderDetails.materialId, name: stitchOrderDetails.materials}] : [],
+      materials: stitchOrderDetails.materials ? [{ id: stitchOrderDetails.materialId, name: stitchOrderDetails.materials }] : [],
       materialId: stitchOrderDetails.materialId,
       price: parseFloat(stitchOrderDetails.price),
       qty: 1,
@@ -263,26 +289,26 @@ export default function PosPage() {
     if (activeInvoice) return; // Prevent modification when paying an invoice
     setCart((prevCart) => prevCart.filter((item) => item.id !== itemId));
   };
-  
+
   const handleUpdateCartQuantity = (itemId: string, newQty: number) => {
     if (activeInvoice) return;
-    
+
     if (newQty < 1) {
-        handleRemoveFromCart(itemId);
-        return;
+      handleRemoveFromCart(itemId);
+      return;
     }
-    
+
     setCart((prevCart) =>
       prevCart.map((item) =>
         item.id === itemId ? { ...item, qty: newQty } : item
       )
     );
   };
-  
+
   const handleSaveCustomer = () => {
     if (activeInvoice) return;
     if (!newCustomer.firstName || !newCustomer.lastName || !newCustomer.email) {
-       toast({
+      toast({
         variant: 'destructive',
         title: 'Missing Information',
         description:
@@ -300,19 +326,19 @@ export default function PosPage() {
       avatar: randomAvatar.imageUrl,
       imageHint: randomAvatar.imageHint,
     };
-    
+
     addCustomer(newCustomerData);
-    
+
     const tempCustomer: Omit<Customer, 'totalOrders' | 'totalSpent'> = {
-        id: 'temp-' + Date.now(),
-        ...newCustomerData,
-        name: `${newCustomer.firstName} ${newCustomer.lastName}`,
+      id: 'temp-' + Date.now(),
+      ...newCustomerData,
+      name: `${newCustomer.firstName} ${newCustomer.lastName}`,
     }
     setCurrentCustomer(tempCustomer);
 
     setNewCustomer({ firstName: '', lastName: '', email: '', phone: '' });
     setIsCustomerDialogOpen(false);
-     toast({
+    toast({
       title: 'Customer Saved',
       description: `${tempCustomer.name} has been added to the order.`,
     });
@@ -333,31 +359,33 @@ export default function PosPage() {
     const creditedAmount = Math.min(paidAmount, amountDue);
 
     if (activeInvoice) { // This is a payment for an existing invoice
-        const existingInvoice = invoices.find(inv => inv.id === activeInvoice.id);
-        if (existingInvoice) {
-            const newTotalPaid = (existingInvoice.deposit || 0) + creditedAmount;
-            const newAmountDue = existingInvoice.total - newTotalPaid;
-            let newStatus: 'Paid' | 'Pending' | 'Partially Paid' | 'Overdue' = existingInvoice.status;
+      const existingInvoice = invoices.find(inv => inv.id === activeInvoice.id);
+      if (existingInvoice) {
+        const newTotalPaid = (existingInvoice.deposit || 0) + creditedAmount;
+        const newAmountDue = existingInvoice.total - newTotalPaid;
+        let newStatus: 'Paid' | 'Pending' | 'Partially Paid' | 'Overdue' = existingInvoice.status;
 
-            if (newAmountDue <= 0) {
-              newStatus = 'Paid';
-            } else if (newTotalPaid > 0) {
-              newStatus = 'Partially Paid';
-            }
-            
-            const updatePayload: Partial<FirestoreInvoice> = {
-                status: newStatus,
-                deposit: newTotalPaid,
-                amountDue: newAmountDue,
-            };
-
-            if (finalPaymentMethod) {
-                updatePayload.paymentMethod = finalPaymentMethod;
-            }
-            
-            updateInvoice(activeInvoice.id, updatePayload);
+        if (newAmountDue <= 0) {
+          newStatus = 'Paid';
+        } else if (newTotalPaid > 0) {
+          newStatus = 'Partially Paid';
         }
-        return true;
+
+        const updatePayload: Partial<FirestoreInvoice> = {
+          status: newStatus,
+          deposit: newTotalPaid,
+          amountDue: newAmountDue,
+        };
+
+        if (finalPaymentMethod) {
+          updatePayload.paymentMethod = finalPaymentMethod;
+        }
+
+        updateInvoice(activeInvoice.id, updatePayload);
+        return { ...existingInvoice, ...updatePayload } as Invoice;
+      }
+      // If we are paying a non-existent invoice (should theoretically not happen if activeInvoice is set)
+      return null;
     }
 
     if (cart.length === 0) {
@@ -371,75 +399,75 @@ export default function PosPage() {
 
     // Final stock check before processing
     for (const item of cart) {
-        if (item.type === 'Product') {
-            const inventoryItem = inventory.find(invItem => invItem.id === item.id);
-        } else if (item.materials) {
-             for (const material of item.materials) {
-                const materialItem = inventory.find(invItem => invItem.id === material.id);
-                if (materialItem && materialItem.stock < 1) { // Assuming 1 unit per material
-                    toast({
-                        variant: 'destructive',
-                        title: 'Processing Failed: Material Out of Stock',
-                        description: `"${materialItem.name}" is out of stock.`,
-                    });
-                    return false;
-                }
-            }
+      if (item.type === 'Product') {
+        const inventoryItem = inventory.find(invItem => invItem.id === item.id);
+      } else if (item.materials) {
+        for (const material of item.materials) {
+          const materialItem = inventory.find(invItem => invItem.id === material.id);
+          if (materialItem && materialItem.stock < 1) { // Assuming 1 unit per material
+            toast({
+              variant: 'destructive',
+              title: 'Processing Failed: Material Out of Stock',
+              description: `"${materialItem.name}" is out of stock.`,
+            });
+            return null;
+          }
         }
+      }
     }
 
 
     const customerIdForOrder = currentCustomer?.id || 'walk-in';
     const invoiceItems: InvoiceItem[] = [];
     const orderCreationPromises: Promise<{ cartItemId: string, orderId: string | undefined }>[] = [];
-    
+
     // Group repairs
     const repairItems = cart.filter(item => item.type === 'Repair');
     const nonRepairItems = cart.filter(item => item.type !== 'Repair');
 
     if (repairItems.length > 0) {
-        const totalRepairAmount = repairItems.reduce((sum, item) => sum + item.price * item.qty, 0);
-        const allMaterials = repairItems.flatMap(item => item.materials);
-        const allMaterialIds = [...new Set(allMaterials.map(m => m.id))];
-        const allMaterialNames = [...new Set(allMaterials.map(m => m.name))].join(', ');
-        const totalMaterialCost = allMaterialIds.reduce((sum, id) => {
-            const invItem = inventory.find(i => i.id === id);
-            return sum + (invItem?.costPrice || 0);
-        }, 0);
-        
-        allMaterialIds.forEach(id => {
-            const invItem = inventory.find(i => i.id === id);
-            if(invItem) updateInventoryItem(id, { stock: invItem.stock - 1 });
-        });
+      const totalRepairAmount = repairItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+      const allMaterials = repairItems.flatMap(item => item.materials);
+      const allMaterialIds = [...new Set(allMaterials.map(m => m.id))];
+      const allMaterialNames = [...new Set(allMaterials.map(m => m.name))].join(', ');
+      const totalMaterialCost = allMaterialIds.reduce((sum, id) => {
+        const invItem = inventory.find(i => i.id === id);
+        return sum + (invItem?.costPrice || 0);
+      }, 0);
 
-        const consolidatedRepairOrder: Omit<FirestoreOrder, 'id'> = {
-            customerId: customerIdForOrder,
-            type: 'Repair',
-            stitchTypes: 'Various',
-            materials: allMaterialNames,
-            deliveryDate: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
-            status: 'Placed',
-            amount: totalRepairAmount,
-            materialCost: totalMaterialCost,
-            materialIds: allMaterialIds,
-            damageDescription: repairItems.map(item => `${item.name}: ${item.details}`).join('\n---\n'),
-            repairInstructions: repairItems.map(item => item.details).join('\n---\n'),
-            items: repairItems.map(item => ({
-                id: item.id,
-                name: item.name,
-                details: item.details,
-                materials: item.materials,
-                price: item.price,
-                quantity: item.qty,
-            })),
-        };
-        const repairOrderPromise = addOrder(consolidatedRepairOrder).then(docRef => ({
-            cartItemId: 'consolidated-repair',
-            orderId: docRef?.id
-        }));
-        orderCreationPromises.push(repairOrderPromise);
+      allMaterialIds.forEach(id => {
+        const invItem = inventory.find(i => i.id === id);
+        if (invItem) updateInventoryItem(id, { stock: invItem.stock - 1 });
+      });
+
+      const consolidatedRepairOrder: Omit<FirestoreOrder, 'id'> = {
+        customerId: customerIdForOrder,
+        type: 'Repair',
+        stitchTypes: 'Various',
+        materials: allMaterialNames,
+        deliveryDate: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+        status: 'Placed',
+        amount: totalRepairAmount,
+        materialCost: totalMaterialCost,
+        materialIds: allMaterialIds,
+        damageDescription: repairItems.map(item => `${item.name}: ${item.details}`).join('\n---\n'),
+        repairInstructions: repairItems.map(item => item.details).join('\n---\n'),
+        items: repairItems.map(item => ({
+          id: item.id,
+          name: item.name,
+          details: item.details,
+          materials: item.materials,
+          price: item.price,
+          quantity: item.qty,
+        })),
+      };
+      const repairOrderPromise = addOrder(consolidatedRepairOrder).then(docRef => ({
+        cartItemId: 'consolidated-repair',
+        orderId: docRef?.id
+      }));
+      orderCreationPromises.push(repairOrderPromise);
     }
-    
+
     // Process other items individually
     nonRepairItems.forEach(item => {
       let materialCost = 0;
@@ -451,11 +479,11 @@ export default function PosPage() {
         }
       } else if (item.materials) { // StitchOrder
         item.materials.forEach(material => {
-            const materialItem = inventory.find(inv => inv.id === material.id);
-            if(materialItem) {
-                updateInventoryItem(materialItem.id, { stock: materialItem.stock - 1 });
-                materialCost += (materialItem.costPrice || 0);
-            }
+          const materialItem = inventory.find(inv => inv.id === material.id);
+          if (materialItem) {
+            updateInventoryItem(materialItem.id, { stock: materialItem.stock - 1 });
+            materialCost += (materialItem.costPrice || 0);
+          }
         });
       }
 
@@ -470,12 +498,12 @@ export default function PosPage() {
         materialCost: materialCost,
         materialIds: item.materials.map(m => m.id),
       };
-      
+
       if (item.type === 'StitchOrder') {
         newOrderData.damageDescription = item.details;
-        if(item.details) newOrderData.repairInstructions = item.details;
+        if (item.details) newOrderData.repairInstructions = item.details;
       }
-      
+
       const orderPromise = addOrder(newOrderData as Omit<FirestoreOrder, 'id'>).then(docRef => ({
         cartItemId: item.id,
         orderId: docRef?.id
@@ -484,28 +512,28 @@ export default function PosPage() {
     });
 
     const createdOrders = await Promise.all(orderCreationPromises);
-    
+
     // Map created orders back to invoice items
     for (const item of cart) {
-        let correspondingOrder;
-        if (item.type === 'Repair') {
-            correspondingOrder = createdOrders.find(o => o.cartItemId === 'consolidated-repair');
-        } else {
-            correspondingOrder = createdOrders.find(o => o.cartItemId === item.id);
-        }
+      let correspondingOrder;
+      if (item.type === 'Repair') {
+        correspondingOrder = createdOrders.find(o => o.cartItemId === 'consolidated-repair');
+      } else {
+        correspondingOrder = createdOrders.find(o => o.cartItemId === item.id);
+      }
 
-        invoiceItems.push({
-            id: item.id,
-            orderId: correspondingOrder?.orderId,
-            name: item.name,
-            quantity: item.qty,
-            price: item.price,
-            total: item.price * item.qty,
-        });
+      invoiceItems.push({
+        id: item.id,
+        orderId: correspondingOrder?.orderId,
+        name: item.name,
+        quantity: item.qty,
+        price: item.price,
+        total: item.price * item.qty,
+      });
     }
 
     const finalCreditedAmount = Math.min(paidAmount, cartTotal);
-    
+
     let invoiceStatus: 'Paid' | 'Pending' | 'Partially Paid';
     if (finalCreditedAmount >= cartTotal) {
       invoiceStatus = 'Paid';
@@ -514,7 +542,7 @@ export default function PosPage() {
     } else {
       invoiceStatus = 'Pending';
     }
-    
+
     const invoicePayload: Omit<FirestoreInvoice, 'id'> = {
       customerId: customerIdForOrder,
       date: Timestamp.now(),
@@ -527,9 +555,9 @@ export default function PosPage() {
       deposit: finalCreditedAmount,
       amountDue: cartTotal - finalCreditedAmount,
     };
-    
+
     if (finalPaymentMethod) {
-        invoicePayload.paymentMethod = finalPaymentMethod;
+      invoicePayload.paymentMethod = finalPaymentMethod;
     }
 
 
@@ -537,23 +565,33 @@ export default function PosPage() {
 
     // Now update all created orders with the new invoiceId
     if (newInvoiceId) {
-        const orderUpdatePromises = createdOrders
-            .filter(o => o.orderId)
-            .map(o => updateOrder(o.orderId!, { invoiceId: newInvoiceId }));
+      const orderUpdatePromises = createdOrders
+        .filter(o => o.orderId)
+        .map(o => updateOrder(o.orderId!, { invoiceId: newInvoiceId }));
 
-        await Promise.all(orderUpdatePromises);
+      await Promise.all(orderUpdatePromises);
     }
 
-    return true; // Indicate success
+    // Construct full Invoice object to return
+    const customerObj = currentCustomer ?
+      { ...currentCustomer, totalOrders: 0, totalSpent: 0 } as Customer :
+      { id: 'walk-in', name: 'Walk-in Customer', email: '', firstName: 'Walk-in', lastName: 'Customer', avatar: '', imageHint: '' } as Customer;
+
+    const createdInvoice: Invoice = {
+      id: newInvoiceId,
+      maskedId: 'INV-NEW', // This will be updated by listeners eventually, but for immediate print we might need to fetch or approximate
+      ...invoicePayload,
+      customer: customerObj
+    } as Invoice;
+
+    return createdInvoice;
   };
 
   const handleCreateOrder = async () => {
-    if (await processOrder(0)) {
-       toast({
-        title: 'Order Created',
-        description: 'A new order and pending invoice have been created.',
-      });
-      resetPos();
+    const result = await processOrder(0);
+    if (result) {
+      setLastInvoice(result);
+      setIsSuccessDialogOpen(true);
     }
   };
 
@@ -568,19 +606,17 @@ export default function PosPage() {
     }
     const paidAmountValue = parseFloat(amountPaid);
     if (isNaN(paidAmountValue) || paidAmountValue < 0) {
-        toast({ variant: 'destructive', title: 'Invalid amount', description: 'Please enter a valid amount paid.' });
-        return;
+      toast({ variant: 'destructive', title: 'Invalid amount', description: 'Please enter a valid amount paid.' });
+      return;
     }
 
-    if (await processOrder(paidAmountValue, paymentMethod)) {
-      toast({
-        title: activeInvoice ? 'Payment Successful' : 'Checkout Successful',
-        description: `Paid ${formatCurrency(Math.min(paidAmountValue, amountDue))} with ${paymentMethod}.`,
-      });
-      resetPos();
+    const result = await processOrder(paidAmountValue, paymentMethod);
+    if (result) {
+      setLastInvoice(result);
+      setIsSuccessDialogOpen(true);
     }
   };
-  
+
   const products = inventory
     .filter(item => item.showInPOS ?? true) // Filter based on showInPOS flag
     .map(item => ({
@@ -594,7 +630,7 @@ export default function PosPage() {
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(productSearch.toLowerCase())
   );
-  
+
   const productsByCategory = filteredProducts.reduce((acc, product) => {
     (acc[product.category] = acc[product.category] || []).push(product);
     return acc;
@@ -617,33 +653,33 @@ export default function PosPage() {
 
   const handleSelectInvoice = (invoice: Invoice) => {
     const cartItems: CartItem[] = invoice.items.map(item => ({
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        qty: item.quantity,
-        type: 'Product', // Simplified, but sufficient for display
-        materials: [],
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      qty: item.quantity,
+      type: 'Product', // Simplified, but sufficient for display
+      materials: [],
     }));
     setCart(cartItems);
     setCurrentCustomer(invoice.customer);
     setActiveInvoice(invoice);
   };
-  
+
   const handleSelectMaterial = (material: InventoryItemType) => {
     // prevent duplicates
     if (repairDetails.materials.some(m => m.id === material.id)) {
-        return;
+      return;
     }
     setRepairDetails(prev => ({
-        ...prev,
-        materials: [...prev.materials, { id: material.id, name: material.name }]
+      ...prev,
+      materials: [...prev.materials, { id: material.id, name: material.name }]
     }));
   };
 
   const handleRemoveMaterial = (materialId: string) => {
     setRepairDetails(prev => ({
-        ...prev,
-        materials: prev.materials.filter(m => m.id !== materialId)
+      ...prev,
+      materials: prev.materials.filter(m => m.id !== materialId)
     }));
   };
 
@@ -683,16 +719,16 @@ export default function PosPage() {
                       <p>{currentCustomer.name}</p>
                       {activeInvoice && <p className="text-sm text-muted-foreground">Invoice: {activeInvoice.maskedId}</p>}
                     </div>
-                     <Button variant="ghost" size="icon" onClick={() => { if (!activeInvoice) setCurrentCustomer(null); }} className="ml-auto" disabled={!!activeInvoice}>
-                        <X className="w-4 h-4" />
-                     </Button>
+                    <Button variant="ghost" size="icon" onClick={() => { if (!activeInvoice) setCurrentCustomer(null); }} className="ml-auto" disabled={!!activeInvoice}>
+                      <X className="w-4 h-4" />
+                    </Button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 w-full">
                     <CustomerInvoiceSearch
-                        onSelectCustomer={handleSelectCustomer}
-                        onSelectInvoice={handleSelectInvoice}
-                        disabled={!!activeInvoice}
+                      onSelectCustomer={handleSelectCustomer}
+                      onSelectInvoice={handleSelectInvoice}
+                      disabled={!!activeInvoice}
                     />
                     <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
                       <DialogTrigger asChild>
@@ -724,7 +760,7 @@ export default function PosPage() {
                               placeholder="John"
                               className="col-span-3"
                               value={newCustomer.firstName}
-                              onChange={e => setNewCustomer({...newCustomer, firstName: e.target.value})}
+                              onChange={e => setNewCustomer({ ...newCustomer, firstName: e.target.value })}
                             />
                           </div>
                           <div className="grid grid-cols-4 items-center gap-4">
@@ -736,7 +772,7 @@ export default function PosPage() {
                               placeholder="Doe"
                               className="col-span-3"
                               value={newCustomer.lastName}
-                              onChange={e => setNewCustomer({...newCustomer, lastName: e.target.value})}
+                              onChange={e => setNewCustomer({ ...newCustomer, lastName: e.target.value })}
                             />
                           </div>
                           <div className="grid grid-cols-4 items-center gap-4">
@@ -749,7 +785,7 @@ export default function PosPage() {
                               placeholder="john.doe@example.com"
                               className="col-span-3"
                               value={newCustomer.email}
-                              onChange={e => setNewCustomer({...newCustomer, email: e.target.value})}
+                              onChange={e => setNewCustomer({ ...newCustomer, email: e.target.value })}
                             />
                           </div>
                           <div className="grid grid-cols-4 items-center gap-4">
@@ -762,7 +798,7 @@ export default function PosPage() {
                               placeholder="(123) 456-7890"
                               className="col-span-3"
                               value={newCustomer.phone}
-                              onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})}
+                              onChange={e => setNewCustomer({ ...newCustomer, phone: e.target.value })}
                             />
                           </div>
                         </div>
@@ -811,22 +847,22 @@ export default function PosPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                           {activeInvoice ? (
+                          {activeInvoice ? (
                             item.qty
                           ) : (
-                          <Input
-                            type="number"
-                            value={item.qty}
-                            onChange={(e) =>
-                              handleUpdateCartQuantity(
-                                item.id,
-                                parseInt(e.target.value, 10) || 1
-                              )
-                            }
-                            className="w-16 h-8 text-center"
-                            min="1"
-                            disabled={item.type !== 'Product' || !!activeInvoice}
-                          />
+                            <Input
+                              type="number"
+                              value={item.qty}
+                              onChange={(e) =>
+                                handleUpdateCartQuantity(
+                                  item.id,
+                                  parseInt(e.target.value, 10) || 1
+                                )
+                              }
+                              className="w-16 h-8 text-center"
+                              min="1"
+                              disabled={item.type !== 'Product' || !!activeInvoice}
+                            />
                           )}
                         </TableCell>
                         <TableCell className="text-right">
@@ -861,24 +897,24 @@ export default function PosPage() {
               </Table>
             </CardContent>
             {cart.length > 0 && (
-            <CardFooter className="flex flex-col gap-2 bg-muted/50 p-4 mt-auto">
-              {!activeInvoice && (
-                <>
-                  <div className="flex justify-between items-center w-full text-sm">
-                    <span>Subtotal</span>
-                    <span>{formatCurrency(cartSubTotal)}</span>
-                  </div>
-                  <div className="flex justify-between items-center w-full text-sm">
-                    <span>{taxName} ({taxRate * 100}%)</span>
-                    <span>{formatCurrency(tax)}</span>
-                  </div>
-                </>
-              )}
-              <div className="flex justify-between items-center w-full font-bold text-lg mt-2">
-                <span>{activeInvoice ? 'Amount Due' : 'Total'}</span>
-                <span>{formatCurrency(amountDue)}</span>
-              </div>
-            </CardFooter>
+              <CardFooter className="flex flex-col gap-2 bg-muted/50 p-4 mt-auto">
+                {!activeInvoice && (
+                  <>
+                    <div className="flex justify-between items-center w-full text-sm">
+                      <span>Subtotal</span>
+                      <span>{formatCurrency(cartSubTotal)}</span>
+                    </div>
+                    <div className="flex justify-between items-center w-full text-sm">
+                      <span>{taxName} ({taxRate * 100}%)</span>
+                      <span>{formatCurrency(tax)}</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-between items-center w-full font-bold text-lg mt-2">
+                  <span>{activeInvoice ? 'Amount Due' : 'Total'}</span>
+                  <span>{formatCurrency(amountDue)}</span>
+                </div>
+              </CardFooter>
             )}
           </Card>
 
@@ -899,17 +935,17 @@ export default function PosPage() {
                 Create Order
               </Button>
             ) : (
-                 <Button
-                    variant="outline"
-                    onClick={() => processOrder(0)}
-                    disabled={cart.length === 0}
-                  >
-                   Create Invoice
-                  </Button>
+              <Button
+                variant="outline"
+                onClick={() => processOrder(0)}
+                disabled={cart.length === 0}
+              >
+                Create Invoice
+              </Button>
             )}
             <Dialog open={isCheckoutDialogOpen} onOpenChange={setIsCheckoutDialogOpen}>
               <DialogTrigger asChild>
-                 <Button
+                <Button
                   disabled={cart.length === 0}
                   className="min-w-[150px] bg-primary hover:bg-primary/90"
                 >
@@ -940,8 +976,8 @@ export default function PosPage() {
 
                   {changeDue > 0 && paymentMethod === 'Cash' && (
                     <div className="rounded-lg border-2 border-primary bg-primary/10 p-4 flex flex-col justify-center items-center text-primary">
-                        <span className="text-sm font-medium">Change Due</span>
-                        <span className="text-2xl font-bold">{formatCurrency(changeDue)}</span>
+                      <span className="text-sm font-medium">Change Due</span>
+                      <span className="text-2xl font-bold">{formatCurrency(changeDue)}</span>
                     </div>
                   )}
 
@@ -1001,23 +1037,23 @@ export default function PosPage() {
                 <CardHeader>
                   {!selectedCategory ? (
                     <>
-                    <CardTitle>Sell a Product</CardTitle>
-                    <CardDescription>
-                      Select a category to view products.
-                    </CardDescription>
+                      <CardTitle>Sell a Product</CardTitle>
+                      <CardDescription>
+                        Select a category to view products.
+                      </CardDescription>
                     </>
                   ) : (
                     <div className="flex items-center gap-2">
-                       <Button variant="ghost" size="icon" className="-ml-2" onClick={handleBackToCategories}>
-                        <ArrowLeft className="w-5 h-5"/>
+                      <Button variant="ghost" size="icon" className="-ml-2" onClick={handleBackToCategories}>
+                        <ArrowLeft className="w-5 h-5" />
                         <span className="sr-only">Back to categories</span>
-                       </Button>
-                        <div>
-                         <CardTitle>{selectedCategory}</CardTitle>
-                          <CardDescription>
-                            Search for a product to add to the order.
-                          </CardDescription>
-                        </div>
+                      </Button>
+                      <div>
+                        <CardTitle>{selectedCategory}</CardTitle>
+                        <CardDescription>
+                          Search for a product to add to the order.
+                        </CardDescription>
+                      </div>
                     </div>
                   )}
                 </CardHeader>
@@ -1035,33 +1071,33 @@ export default function PosPage() {
                     </div>
                   </div>
                   {selectedCategory ? (
-                     <>
+                    <>
                       <div className="space-y-2">
                         {(productsByCategory[selectedCategory] || [])
-                        .filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()))
-                        .map((product) => (
-                           <Card
-                            key={product.id}
-                            className="p-3 flex justify-between items-center"
-                          >
-                            <div>
-                              <p className="font-medium">{product.name}</p>
-                              <div className="text-sm text-muted-foreground flex gap-4">
-                                <span>{formatCurrency(product.price)}</span>
-                                <span className={cn(product.stock <=0 ? 'text-destructive' : '')}>
-                                  {product.stock} in stock
-                                </span>
-                              </div>
-                            </div>
-                            <Button
-                              size="sm"
-                              onClick={() => handleAddToCart(product)}
-                              disabled={!!activeInvoice}
+                          .filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                          .map((product) => (
+                            <Card
+                              key={product.id}
+                              className="p-3 flex justify-between items-center"
                             >
-                              <PlusCircle className="mr-2 h-4 w-4" /> Add
-                            </Button>
-                          </Card>
-                        ))}
+                              <div>
+                                <p className="font-medium">{product.name}</p>
+                                <div className="text-sm text-muted-foreground flex gap-4">
+                                  <span>{formatCurrency(product.price)}</span>
+                                  <span className={cn(product.stock <= 0 ? 'text-destructive' : '')}>
+                                    {product.stock} in stock
+                                  </span>
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => handleAddToCart(product)}
+                                disabled={!!activeInvoice}
+                              >
+                                <PlusCircle className="mr-2 h-4 w-4" /> Add
+                              </Button>
+                            </Card>
+                          ))}
                       </div>
                     </>
                   ) : (
@@ -1125,25 +1161,25 @@ export default function PosPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="repair-materials">Materials</Label>
-                    <MaterialSearch 
-                        onSelectMaterial={handleSelectMaterial}
-                        disabled={!!activeInvoice}
+                    <MaterialSearch
+                      onSelectMaterial={handleSelectMaterial}
+                      disabled={!!activeInvoice}
                     />
                     <div className="flex flex-wrap gap-2 pt-2">
-                        {repairDetails.materials.map(material => (
-                            <Badge key={material.id} variant="secondary" className="pl-2 pr-1 py-1 text-sm">
-                                {material.name}
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-5 w-5 ml-1"
-                                    onClick={() => handleRemoveMaterial(material.id)}
-                                >
-                                    <X className="h-3 w-3"/>
-                                    <span className="sr-only">Remove {material.name}</span>
-                                </Button>
-                            </Badge>
-                        ))}
+                      {repairDetails.materials.map(material => (
+                        <Badge key={material.id} variant="secondary" className="pl-2 pr-1 py-1 text-sm">
+                          {material.name}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 ml-1"
+                            onClick={() => handleRemoveMaterial(material.id)}
+                          >
+                            <X className="h-3 w-3" />
+                            <span className="sr-only">Remove {material.name}</span>
+                          </Button>
+                        </Badge>
+                      ))}
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -1202,10 +1238,10 @@ export default function PosPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="stitch-materials">Materials & Fabric</Label>
-                    <MaterialSearch 
-                        onSelectMaterial={handleSelectStitchMaterial}
-                        initialMaterialName={stitchOrderDetails.materials}
-                        disabled={!!activeInvoice}
+                    <MaterialSearch
+                      onSelectMaterial={handleSelectStitchMaterial}
+                      initialMaterialName={stitchOrderDetails.materials}
+                      disabled={!!activeInvoice}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1260,6 +1296,36 @@ export default function PosPage() {
           </Tabs>
         </div>
       </div>
+      {/* Hidden components for printing */}
+      <div className="hidden">
+        {lastInvoice && <StandardInvoice ref={standardInvoiceRef} invoice={lastInvoice} />}
+        {lastInvoice && <PrintableReceipt ref={receiptRef} invoice={lastInvoice} />}
+      </div>
+
+      {/* Success Dialog */}
+      <Dialog open={isSuccessDialogOpen} onOpenChange={setIsSuccessDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Order Placed Successfully</DialogTitle>
+            <DialogDescription>
+              Order #{lastInvoice?.maskedId} has been created. What would you like to do?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-4">
+            <Button onClick={handlePrintReceipt} variant="outline" className="w-full justify-start">
+              <Printer className="mr-2 h-4 w-4" /> Print Thermal Receipt (80mm)
+            </Button>
+            <Button onClick={handlePrintInvoice} variant="outline" className="w-full justify-start">
+              <Printer className="mr-2 h-4 w-4" /> Print Standard Invoice (A4)
+            </Button>
+          </div>
+          <DialogFooter className="sm:justify-start">
+            <Button onClick={() => { setIsSuccessDialogOpen(false); resetPos(); }} className="w-full">
+              <Plus className="mr-2 h-4 w-4" /> New Order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

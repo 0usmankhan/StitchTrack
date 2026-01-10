@@ -23,6 +23,7 @@ import {
 import { Button } from './ui/button';
 import { Printer } from 'lucide-react';
 import { PrintableReceipt } from './printable-receipt';
+import { StandardInvoice } from './standard-invoice';
 
 
 type InvoiceDetailsProps = {
@@ -40,8 +41,9 @@ const statusColors: Record<InvoiceStatus, string> = {
 
 export function InvoiceDetails({ invoice }: InvoiceDetailsProps) {
   const componentToPrintRef = useRef(null);
+  const standardInvoiceRef = useRef(null);
 
-  const handlePrint = useReactToPrint({
+  const handlePrintReceipt = useReactToPrint({
     content: () => componentToPrintRef.current,
     pageStyle: `
       @page { 
@@ -57,10 +59,27 @@ export function InvoiceDetails({ invoice }: InvoiceDetailsProps) {
     `,
   });
 
+  const handlePrintInvoice = useReactToPrint({
+    content: () => standardInvoiceRef.current,
+    documentTitle: `Invoice-${invoice.maskedId}`,
+  });
+
+  const formatDate = (date: any) => {
+    try {
+      if (!date) return 'N/A';
+      if (typeof date === 'string') return format(parseISO(date), 'PPP');
+      if (date.toDate) return format(date.toDate(), 'PPP');
+      return format(new Date(date), 'PPP');
+    } catch (e) {
+      return 'Invalid Date';
+    }
+  };
+
   return (
     <>
       <div style={{ display: 'none' }}>
         <PrintableReceipt ref={componentToPrintRef} invoice={invoice} />
+        <StandardInvoice ref={standardInvoiceRef} invoice={invoice} />
       </div>
 
       <SheetHeader className="pb-4">
@@ -73,10 +92,16 @@ export function InvoiceDetails({ invoice }: InvoiceDetailsProps) {
               Details for invoice sent to {invoice.customer.name}.
             </SheetDescription>
           </div>
-          <Button variant="outline" size="icon" onClick={handlePrint}>
-            <Printer className="h-4 w-4" />
-            <span className="sr-only">Print Invoice</span>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handlePrintReceipt}>
+              <Printer className="h-4 w-4 mr-2" />
+              Receipt
+            </Button>
+            <Button variant="outline" size="sm" onClick={handlePrintInvoice}>
+              <Printer className="h-4 w-4 mr-2" />
+              Invoice
+            </Button>
+          </div>
         </div>
       </SheetHeader>
       <div className="space-y-6">
@@ -122,12 +147,12 @@ export function InvoiceDetails({ invoice }: InvoiceDetailsProps) {
 
             <p className="text-muted-foreground">Invoice Date</p>
             <p className="text-right font-medium">
-              {format(parseISO(invoice.date), 'PPP')}
+              {formatDate(invoice.date)}
             </p>
 
             <p className="text-muted-foreground">Due Date</p>
             <p className="text-right font-medium">
-              {format(parseISO(invoice.dueDate), 'PPP')}
+              {formatDate(invoice.dueDate)}
             </p>
 
             {invoice.paymentMethod && (
