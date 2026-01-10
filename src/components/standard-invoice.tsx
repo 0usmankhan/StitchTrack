@@ -3,28 +3,27 @@ import { Invoice } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import Image from 'next/image';
+import { useSettings } from '@/context/settings-context';
 
 interface StandardInvoiceProps {
     invoice: Invoice;
 }
 
 export const StandardInvoice = forwardRef<HTMLDivElement, StandardInvoiceProps>(({ invoice }, ref) => {
-    // Hardcoded store details for now, similar to thermal receipt default
-    // Ideally this comes from settings context if those fields existed
-    const storeDetails = {
-        name: "StitchTrack POS",
-        address: "123 Main Street, Anytown, USA",
-        phone: "555-123-4567",
-        email: "support@stitchtrack.com",
-        website: "www.stitchtrack.com"
-    };
+    const { storeDetails } = useSettings();
 
-    const formatDate = (dateString: string | any) => {
+    const formatDate = (date: any) => {
         try {
-            if (!dateString) return 'N/A';
-            return format(parseISO(dateString), 'PPP');
+            if (!date) return 'N/A';
+            if (typeof date === 'string') return format(parseISO(date), 'PPP');
+            if (date.toDate) return format(date.toDate(), 'PPP'); // Handle Firebase Timestamp
+            if (date instanceof Date) return format(date, 'PPP');
+            // If it's a seconds/nanoseconds object that didn't get turned into a Timestamp prototype
+            if (date.seconds) return format(new Date(date.seconds * 1000), 'PPP');
+
+            return format(new Date(date), 'PPP');
         } catch (e) {
-            return String(dateString);
+            return 'Invalid Date';
         }
     };
 
@@ -45,8 +44,8 @@ export const StandardInvoice = forwardRef<HTMLDivElement, StandardInvoiceProps>(
                     <p className="text-sm text-gray-600">Date: {formatDate(invoice.date)}</p>
                     <p className="text-sm text-gray-600">Due Date: {formatDate(invoice.dueDate)}</p>
                     <div className={`mt-2 inline-block px-3 py-1 rounded text-sm font-bold border ${invoice.status === 'Paid' ? 'border-green-600 text-green-700 bg-green-50' :
-                            invoice.status === 'Overdue' ? 'border-red-600 text-red-700 bg-red-50' :
-                                'border-yellow-600 text-yellow-700 bg-yellow-50'
+                        invoice.status === 'Overdue' ? 'border-red-600 text-red-700 bg-red-50' :
+                            'border-yellow-600 text-yellow-700 bg-yellow-50'
                         }`}>
                         {invoice.status.toUpperCase()}
                     </div>

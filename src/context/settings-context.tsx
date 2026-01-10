@@ -13,6 +13,14 @@ interface NotificationSettings {
   newOrders: boolean;
 }
 
+export interface StoreDetails {
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
+}
+
 const defaultReceiptTemplate = `
               {{store_name}}
             {{store_address}}
@@ -61,6 +69,8 @@ interface SettingsContextType {
   setNotifications: React.Dispatch<React.SetStateAction<NotificationSettings>>;
   receiptTemplate: string;
   setReceiptTemplate: (template: string) => void;
+  storeDetails: StoreDetails;
+  setStoreDetails: React.Dispatch<React.SetStateAction<StoreDetails>>;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(
@@ -95,6 +105,14 @@ const initialNotifications: NotificationSettings = {
   newOrders: false,
 };
 
+const initialStoreDetails: StoreDetails = {
+  name: 'StitchTrack POS',
+  address: '123 Main Street, Anytown, USA',
+  phone: '555-123-4567',
+  email: 'support@stitchtrack.com',
+  website: 'www.stitchtrack.com',
+};
+
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [taxRate, setTaxRate] = useState(0.08); // Default 8%
   const [taxName, setTaxName] = useState('Tax');
@@ -107,6 +125,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [suppliers, setSuppliers] = useState<string[]>(initialSuppliers);
   const [notifications, setNotifications] = useState<NotificationSettings>(initialNotifications);
   const [receiptTemplate, setReceiptTemplate] = useState<string>(defaultReceiptTemplate);
+  const [storeDetails, setStoreDetails] = useState<StoreDetails>(initialStoreDetails);
 
 
   return (
@@ -126,6 +145,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setNotifications,
         receiptTemplate,
         setReceiptTemplate,
+        storeDetails,
+        setStoreDetails,
       }}
     >
       {children}
