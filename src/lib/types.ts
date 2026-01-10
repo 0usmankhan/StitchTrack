@@ -1,10 +1,9 @@
 import { Timestamp, DocumentReference } from 'firebase/firestore';
 
-export type OrderStatus =
-  | 'Placed'
-  | 'In Progress'
-  | 'Completed'
-  | 'Shipped';
+export type OrderStatus = {
+  name: string;
+  color: string;
+};
 
 export type WithId<T> = T & { id: string };
 
@@ -34,6 +33,15 @@ export type PermissionsMap = {
   customization: Permission;
   purchaseOrders: Permission;
 };
+
+export interface StoreDetails {
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
+  logoUrl?: string;
+}
 
 export interface FirestoreRole {
   name: string;
@@ -109,7 +117,7 @@ export interface FirestoreOrder {
   stitchTypes?: string;
   materials?: string; // Comma-separated list of material names
   deliveryDate: Timestamp | string;
-  status: OrderStatus;
+  status: string;
   amount: number;
   damageDescription?: string;
   repairInstructions?: string;

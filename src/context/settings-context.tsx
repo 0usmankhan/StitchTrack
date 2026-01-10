@@ -1,73 +1,17 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-
-export type OrderStatus = {
-  name: string;
-  color: string;
-};
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { StoreDetails, OrderStatus } from '@/lib/types';
+import { useFirestore, setDocumentNonBlocking, useDoc } from '@/firebase';
+import { getGeneralSettingsDocument } from '@/lib/firestore-paths';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { useApp } from '@/context/app-context';
 
 interface NotificationSettings {
   lowStock: boolean;
   newOrders: boolean;
 }
-
-export interface StoreDetails {
-  name: string;
-  address: string;
-  phone: string;
-  email: string;
-  website: string;
-}
-
-const defaultReceiptTemplate = `
-              {{store_name}}
-            {{store_address}}
-        Phone: {{store_phone}}
-        Website: {{store_website}}
-------------------------------------------
-Date: {{invoice.date}}
-Invoice #: {{invoice.id}}
-Ticket: {{ticket_no}}
-Customer: {{customer.name}}
-------------------------------------------
-Item          Qty              Price
-------------------------------------------
-{{#each items}}
-{{this.name}}
-              {{this.quantity}}               {{this.total}}
-{{/each}}
-------------------------------------------
-Sub Total:                  {{invoice.subtotal}}
-Tax:                        {{invoice.tax}}
-------------------------------------------
-Total:                      {{invoice.total}}
-{{#if invoice.paid}}
-Paid:                       {{invoice.paid}}
-{{/if}}
-Amount Due:                 {{invoice.amountDue}}
-------------------------------------------
-Payment Method: {{payment_method}}
-
-        {{footer.message}}
-`;
-
-const defaultInvoiceTemplate = undefined; // Undefined means it uses the React component by default
-
-const defaultLabelTemplate = `
-<div style="width: 100mm; height: 50mm; padding: 5mm; border: 1px solid black; font-family: sans-serif; display: flex; flex-direction: column; justify-content: space-between;">
-  <div style="text-align: center; font-weight: bold; font-size: 16px;">{{store_name}}</div>
-  <div style="font-size: 12px;">
-    <strong>Customer:</strong> {{customer.name}}<br/>
-    <strong>Order:</strong> {{order.id}}
-  </div>
-  <div style="text-align: center; font-size: 10px;">
-    {{item.name}}
-  </div>
-</div>
-`;
-
 
 interface SettingsContextType {
   taxRate: number;
@@ -83,7 +27,7 @@ interface SettingsContextType {
   notifications: NotificationSettings;
   setNotifications: React.Dispatch<React.SetStateAction<NotificationSettings>>;
   storeDetails: StoreDetails;
-  setStoreDetails: React.Dispatch<React.SetStateAction<StoreDetails>>;
+  setStoreDetails: (details: StoreDetails) => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(
@@ -95,6 +39,7 @@ const initialProductCategories: string[] = [
   'Notions',
   'Fabrics',
   'Tools',
+  'Services'
 ];
 
 const initialOrderStatuses: OrderStatus[] = [
@@ -127,6 +72,18 @@ const initialStoreDetails: StoreDetails = {
 };
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+  const firestore = useFirestore();
+  const { userProfile } = useApp();
+  // We can derive accountId from userProfile.associatedAccountId (for employees) or user.uid (owner - but we need user object for that)
+  // However, useApp doesn't expose `user` directly, but `userProfile` has `associatedAccountId`.
+  // If `associatedAccountId` is null, it means the user IS the owner, so we need their UID.
+  // Actually, let's just grab `user` from `useUser` hook inside here to be safe and consistent with AppContext logic.
+  // But wait, AppContext already calculates `accountId` internally. Let's see if we can expose it or re-derive it.
+  // Re-deriving is safer than exposing if not already exposed.
+  // The userProfile ID IS the user's UID.
+  const accountId = userProfile?.associatedAccountId || userProfile?.id;
+
+
   const [taxRate, setTaxRate] = useState(0.08); // Default 8%
   const [taxName, setTaxName] = useState('Tax');
   const [productCategories, setProductCategories] = useState<string[]>(
@@ -137,7 +94,38 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   );
   const [suppliers, setSuppliers] = useState<string[]>(initialSuppliers);
   const [notifications, setNotifications] = useState<NotificationSettings>(initialNotifications);
-  const [storeDetails, setStoreDetails] = useState<StoreDetails>(initialStoreDetails);
+  const [storeDetails, setStoreDetailsState] = useState<StoreDetails>(initialStoreDetails);
+
+
+  // Fetch Store Details from Firestore
+  useEffect(() => {
+    if (!firestore || !accountId) return;
+
+    const settingsDocRef = doc(firestore, getGeneralSettingsDocument(accountId));
+
+    // Use onSnapshot for real-time updates across the team
+    const unsubscribe = onSnapshot(settingsDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setStoreDetailsState(docSnap.data() as StoreDetails);
+      } else {
+        // If document doesn't exist yet, we can optionally create it here or just keep defaults.
+        // Keeping defaults in state is fine until they save for the first time.
+      }
+    });
+
+    return () => unsubscribe();
+  }, [firestore, accountId]);
+
+
+  const setStoreDetails = async (details: StoreDetails) => {
+    // Optimistic update
+    setStoreDetailsState(details);
+
+    if (!firestore || !accountId) return;
+    const settingsDocRef = doc(firestore, getGeneralSettingsDocument(accountId));
+    // Write to Firestore
+    await setDocumentNonBlocking(settingsDocRef, details, { merge: true });
+  };
 
 
   return (
