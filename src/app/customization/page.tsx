@@ -16,14 +16,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { X, Plus, Sun, Moon, Laptop, Printer, FileText, Tags } from 'lucide-react';
+import { X, Plus, Sun, Moon, Laptop } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useSettings } from '@/context/settings-context';
 import type { OrderStatus as OrderStatusType } from '@/context/settings-context';
 import { useTheme } from 'next-themes';
 import { Switch } from '@/components/ui/switch';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { ReceiptTemplateEditor } from '@/components/receipt-template-editor';
 
 const defaultNewColor = '#a1a1aa'; // A neutral gray
 
@@ -50,9 +48,7 @@ export default function CustomizationPage() {
   const [newSupplier, setNewSupplier] = useState('');
   const [localTaxRate, setLocalTaxRate] = useState((taxRate * 100).toString());
   const [localTaxName, setLocalTaxName] = useState(taxName);
-  const [isReceiptSheetOpen, setIsReceiptSheetOpen] = useState(false);
-  const [isInvoiceSheetOpen, setIsInvoiceSheetOpen] = useState(false);
-  const [isLabelSheetOpen, setIsLabelSheetOpen] = useState(false);
+
 
 
   const handleAddStatus = () => {
@@ -180,7 +176,7 @@ export default function CustomizationPage() {
       description: `Successfully removed "${supplierToRemove}".`,
     });
   };
-  
+
   const handleSaveTaxSettings = () => {
     const rate = parseFloat(localTaxRate);
     if (isNaN(rate) || rate < 0) {
@@ -198,7 +194,7 @@ export default function CustomizationPage() {
       description: 'Your tax configuration has been updated.',
     });
   };
-  
+
   const handleNotificationChange = (key: keyof typeof notifications, value: boolean) => {
     setNotifications(prev => ({ ...prev, [key]: value }));
   };
@@ -246,61 +242,8 @@ export default function CustomizationPage() {
             </div>
           </CardContent>
         </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>Printable Templates</CardTitle>
-            <CardDescription>
-              Manage templates for receipts, invoices, and labels.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-2">
-               <div 
-                  className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 cursor-pointer"
-                  onClick={() => setIsReceiptSheetOpen(true)}
-               >
-                  <div className="flex items-center gap-4">
-                     <Printer className="w-5 h-5 text-muted-foreground"/>
-                    <div className="space-y-0.5">
-                      <span className="font-medium">Thermal Receipt</span>
-                      <p className="text-xs text-muted-foreground">
-                        Standard template for 80mm thermal printers.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div
-                  className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 cursor-pointer"
-                  onClick={() => setIsInvoiceSheetOpen(true)}
-                >
-                  <div className="flex items-center gap-4">
-                     <FileText className="w-5 h-5 text-muted-foreground"/>
-                    <div className="space-y-0.5">
-                      <span className="font-medium">Invoice</span>
-                      <p className="text-xs text-muted-foreground">
-                        Standard 8.5" x 11" invoice template.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div
-                  className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 cursor-pointer"
-                  onClick={() => setIsLabelSheetOpen(true)}
-                >
-                  <div className="flex items-center gap-4">
-                     <Tags className="w-5 h-5 text-muted-foreground"/>
-                    <div className="space-y-0.5">
-                      <span className="font-medium">Shipping Label</span>
-                      <p className="text-xs text-muted-foreground">
-                        Standard 4" x 6" shipping label template.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-            </div>
-          </CardContent>
-        </Card>
+
+
 
         <Card>
           <CardHeader>
@@ -334,7 +277,7 @@ export default function CustomizationPage() {
             <Button onClick={handleSaveTaxSettings}>Save Tax Settings</Button>
           </CardFooter>
         </Card>
-        
+
         <Card>
           <CardHeader>
             <CardTitle>Notifications</CardTitle>
@@ -356,7 +299,7 @@ export default function CustomizationPage() {
                 onCheckedChange={(checked) => handleNotificationChange('lowStock', checked)}
               />
             </div>
-             <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="flex items-center justify-between rounded-lg border p-3">
               <div className="space-y-0.5">
                 <Label htmlFor="new-order-alerts">New Order Alerts</Label>
                 <p className="text-xs text-muted-foreground">
@@ -526,7 +469,7 @@ export default function CustomizationPage() {
             </p>
           </CardFooter>
         </Card>
-        
+
         <Card>
           <CardHeader>
             <CardTitle>Suppliers</CardTitle>
@@ -583,38 +526,14 @@ export default function CustomizationPage() {
               </div>
             </div>
           </CardContent>
-           <CardFooter>
+          <CardFooter>
             <p className="text-xs text-muted-foreground">
               Note: Changes made here will be reflected across the app.
             </p>
           </CardFooter>
         </Card>
       </div>
-      <Sheet open={isReceiptSheetOpen} onOpenChange={setIsReceiptSheetOpen}>
-        <SheetContent className="w-[90vw] max-w-[1200px] sm:w-[80vw] lg:w-[70vw]">
-          <ReceiptTemplateEditor onClose={() => setIsReceiptSheetOpen(false)} />
-        </SheetContent>
-      </Sheet>
-      <Sheet open={isInvoiceSheetOpen} onOpenChange={setIsInvoiceSheetOpen}>
-        <SheetContent className="w-[90vw] max-w-[1200px] sm:w-[80vw] lg:w-[70vw]">
-          {/* Placeholder for Invoice Editor */}
-          <div className="p-6">
-            <h2 className="text-xl font-bold">Invoice Template Editor</h2>
-            <p className="text-muted-foreground">Coming soon...</p>
-          </div>
-        </SheetContent>
-      </Sheet>
-      <Sheet open={isLabelSheetOpen} onOpenChange={setIsLabelSheetOpen}>
-        <SheetContent className="w-[90vw] max-w-[1200px] sm:w-[80vw] lg:w-[70vw]">
-           {/* Placeholder for Label Editor */}
-           <div className="p-6">
-            <h2 className="text-xl font-bold">Label Template Editor</h2>
-            <p className="text-muted-foreground">Coming soon...</p>
-          </div>
-        </SheetContent>
-      </Sheet>
+
     </DashboardLayout>
   );
 }
-
-    
