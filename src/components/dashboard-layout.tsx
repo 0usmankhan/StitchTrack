@@ -242,18 +242,12 @@ function StoreSwitcher() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Switch Location</DropdownMenuLabel>
-        <DropdownMenuSeparator />
         {stores.map(store => (
           <DropdownMenuItem key={store.id} onClick={() => setActiveStore(store)}>
             {activeStore?.id === store.id && <span className="mr-2">✓</span>}
             {store.name}
           </DropdownMenuItem>
         ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/settings">Manage Locations</Link>
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
