@@ -371,6 +371,16 @@ export default function DashboardLayout({
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )}
+            {permissions?.settings?.read && (
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <Link href="/settings">
+                    <UserCircle />
+                    <span>Settings</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
             {permissions?.customization?.read && (
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
