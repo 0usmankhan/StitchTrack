@@ -82,14 +82,8 @@ interface SettingsContextType {
   setSuppliers: React.Dispatch<React.SetStateAction<string[]>>;
   notifications: NotificationSettings;
   setNotifications: React.Dispatch<React.SetStateAction<NotificationSettings>>;
-  receiptTemplate: string;
-  setReceiptTemplate: (template: string) => void;
   storeDetails: StoreDetails;
   setStoreDetails: React.Dispatch<React.SetStateAction<StoreDetails>>;
-  invoiceTemplate: string | undefined;
-  setInvoiceTemplate: (template: string | undefined) => void;
-  labelTemplate: string;
-  setLabelTemplate: (template: string) => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(
@@ -143,10 +137,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   );
   const [suppliers, setSuppliers] = useState<string[]>(initialSuppliers);
   const [notifications, setNotifications] = useState<NotificationSettings>(initialNotifications);
-  const [receiptTemplate, setReceiptTemplate] = useState<string>(defaultReceiptTemplate);
   const [storeDetails, setStoreDetails] = useState<StoreDetails>(initialStoreDetails);
-  const [invoiceTemplate, setInvoiceTemplate] = useState<string | undefined>(defaultInvoiceTemplate);
-  const [labelTemplate, setLabelTemplate] = useState<string>(defaultLabelTemplate);
 
 
   return (
@@ -164,14 +155,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setSuppliers,
         notifications,
         setNotifications,
-        receiptTemplate,
-        setReceiptTemplate,
         storeDetails,
         setStoreDetails,
-        invoiceTemplate,
-        setInvoiceTemplate,
-        labelTemplate,
-        setLabelTemplate,
       }}
     >
       {children}

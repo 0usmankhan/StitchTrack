@@ -19,18 +19,12 @@ import type { FirestoreUserProfile } from '@/lib/types';
 import { useUser } from '@/firebase';
 import { Eye, EyeOff } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TemplateManagerModal } from '@/components/template-manager-modal';
 import { useSettings } from '@/context/settings-context';
 
 export default function SettingsPage() {
   const { toast } = useToast();
   const { userProfile, updateUserProfile } = useApp();
   const { user } = useUser();
-  const {
-    receiptTemplate,
-    invoiceTemplate,
-    labelTemplate,
-  } = useSettings();
 
   const [profile, setProfile] = useState<Partial<FirestoreUserProfile>>({
     displayName: '',
@@ -42,10 +36,6 @@ export default function SettingsPage() {
   const [confirmPin, setConfirmPin] = useState('');
   const [showPin, setShowPin] = useState(false);
   const [showConfirmPin, setShowConfirmPin] = useState(false);
-
-  // Template Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeTemplateType, setActiveTemplateType] = useState<'receipt' | 'invoice' | 'label'>('receipt');
 
   useEffect(() => {
     if (userProfile) {
@@ -94,11 +84,6 @@ export default function SettingsPage() {
     setConfirmPin('');
   };
 
-  const openModal = (type: 'receipt' | 'invoice' | 'label') => {
-    setActiveTemplateType(type);
-    setIsModalOpen(true);
-  };
-
   return (
     <DashboardLayout>
       <div className="flex flex-col gap-8 max-w-4xl mx-auto pb-20">
@@ -107,10 +92,9 @@ export default function SettingsPage() {
         </h1>
 
         <Tabs defaultValue="account" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="account">Account</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
-            <TabsTrigger value="templates">Templates</TabsTrigger>
           </TabsList>
 
           <TabsContent value="account" className="space-y-4 mt-4">
@@ -176,54 +160,7 @@ export default function SettingsPage() {
               <Button onClick={handleSaveChanges}>Save Security Changes</Button>
             </div>
           </TabsContent>
-
-          <TabsContent value="templates" className="space-y-4 mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Document Templates</CardTitle>
-                <CardDescription>
-                  Customize the layout and content of your receipts, invoices, and labels.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-
-                {/* Receipt Section */}
-                <div className="flex items-center justify-between border-b pb-4">
-                  <div>
-                    <h3 className="text-lg font-medium">Receipt (Thermal)</h3>
-                    <p className="text-sm text-muted-foreground">Edit the template for 80mm thermal receipts.</p>
-                  </div>
-                  <Button variant="outline" onClick={() => openModal('receipt')}>Edit Template</Button>
-                </div>
-
-                {/* Invoice Section */}
-                <div className="flex items-center justify-between border-b pb-4">
-                  <div>
-                    <h3 className="text-lg font-medium">Invoice (A4)</h3>
-                    <p className="text-sm text-muted-foreground">Edit the standard A4 invoice design.</p>
-                  </div>
-                  <Button variant="outline" onClick={() => openModal('invoice')}>Edit Template</Button>
-                </div>
-
-                {/* Label Section */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-medium">Labels</h3>
-                    <p className="text-sm text-muted-foreground">Edit templates for item and shipping labels.</p>
-                  </div>
-                  <Button variant="outline" onClick={() => openModal('label')}>Edit Template</Button>
-                </div>
-
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
-
-        <TemplateManagerModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          type={activeTemplateType}
-        />
       </div>
     </DashboardLayout>
   );

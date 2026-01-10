@@ -8,12 +8,10 @@ import { format, parseISO } from 'date-fns';
 
 interface PrintableReceiptProps {
   invoice: Invoice;
-  customTemplate?: string;
 }
 
-export const PrintableReceipt = forwardRef<HTMLDivElement, PrintableReceiptProps>(({ invoice, customTemplate }, ref) => {
-  const { receiptTemplate: savedTemplate, storeDetails } = useSettings();
-  const templateToUse = customTemplate ?? savedTemplate;
+export const PrintableReceipt = forwardRef<HTMLDivElement, PrintableReceiptProps>(({ invoice }, ref) => {
+  const { storeDetails } = useSettings();
 
   const formatDate = (date: any) => {
     try {
@@ -28,58 +26,71 @@ export const PrintableReceipt = forwardRef<HTMLDivElement, PrintableReceiptProps
     }
   };
 
-  function renderTemplate(templateStr: string, invoiceData: Invoice) {
-    let output = templateStr;
-
-    // Simple replacements
-    output = output.replace(/\{\{store_name\}\}/g, storeDetails.name);
-    output = output.replace(/\{\{store_address\}\}/g, storeDetails.address);
-    output = output.replace(/\{\{store_phone\}\}/g, storeDetails.phone);
-    output = output.replace(/\{\{store_website\}\}/g, storeDetails.website);
-    output = output.replace(/\{\{invoice.id\}\}/g, invoiceData.maskedId);
-
-    output = output.replace(/\{\{invoice.date\}\}/g, formatDate(invoiceData.date));
-
-    output = output.replace(/\{\{customer.name\}\}/g, invoiceData.customer.name);
-    output = output.replace(/\{\{invoice.subtotal\}\}/g, formatCurrency(invoiceData.subtotal));
-    output = output.replace(/\{\{invoice.tax\}\}/g, formatCurrency(invoiceData.tax));
-    output = output.replace(/\{\{invoice.total\}\}/g, formatCurrency(invoiceData.total));
-    output = output.replace(/\{\{invoice.amountDue\}\}/g, formatCurrency(invoiceData.amountDue ?? 0));
-    output = output.replace(/\{\{payment_method\}\}/g, invoiceData.paymentMethod || 'N/A');
-    output = output.replace(/\{\{ticket_no\}\}/g, invoiceData.items?.[0]?.orderId?.substring(0, 8) || 'N/A');
-    output = output.replace(/\{\{footer.message\}\}/g, "Thank you for your business!");
-
-    const ifPaidRegex = /\{\{#if invoice.paid\}\}([\s\S]*?)\{\{\/if\}\}/g;
-    if (invoiceData.deposit && invoiceData.deposit > 0) {
-      output = output.replace(ifPaidRegex, (match, content) => content);
-      output = output.replace(/\{\{invoice.paid\}\}/g, formatCurrency(invoiceData.deposit));
-    } else {
-      output = output.replace(ifPaidRegex, '');
-    }
-
-    const itemsRegex = /\{\{#each items\}\}([\s\S]*?)\{\{\/each\}\}/g;
-    const itemMatch = itemsRegex.exec(output);
-    if (itemMatch) {
-      const itemTemplate = itemMatch[1];
-      const itemsHtml = invoiceData.items.map((item: any) => {
-        let name = item.name.padEnd(12);
-        let qty = item.quantity.toString().padEnd(16);
-        return itemTemplate
-          .replace(/\{\{this.name\}\}/g, name)
-          .replace(/\{\{this.quantity\}\}/g, qty)
-          .replace(/\{\{this.total\}\}/g, formatCurrency(item.total));
-      }).join('\n');
-      output = output.replace(itemsRegex, itemsHtml);
-    }
-
-    return output;
-  }
-
-  const renderedContent = renderTemplate(templateToUse, invoice);
-
   return (
-    <div ref={ref} className="bg-white text-black text-xs font-code w-full max-w-[302px] mx-auto p-2">
-      <pre className="whitespace-pre-wrap font-code">{renderedContent}</pre>
+    <div ref={ref} className="bg-white text-black text-xs font-mono w-[80mm] p-2">
+      <div className="text-center mb-4">
+        <h1 className="text-xl font-bold">{storeDetails.name}</h1>
+        <p>{storeDetails.address}</p>
+        <p>{storeDetails.phone}</p>
+        <p>{storeDetails.website}</p>
+      </div>
+
+      <div className="mb-4 border-b border-black pb-2">
+        <p>Receipt #: {invoice.maskedId}</p>
+        <p>Date: {formatDate(invoice.date)}</p>
+        <p>Customer: {invoice.customer.name}</p>
+      </div>
+
+      <div className="mb-4">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-black">
+              <th className="pb-1">Item</th>
+              <th className="pb-1 text-right">Qty</th>
+              <th className="pb-1 text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoice.items.map((item, index) => (
+              <tr key={index}>
+                <td className="py-1">{item.name}</td>
+                <td className="py-1 text-right">{item.quantity}</td>
+                <td className="py-1 text-right">{formatCurrency(item.total)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="border-t border-black pt-2 mb-4">
+        <div className="flex justify-between">
+          <span>Subtotal:</span>
+          <span>{formatCurrency(invoice.subtotal)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Tax:</span>
+          <span>{formatCurrency(invoice.tax)}</span>
+        </div>
+        <div className="flex justify-between font-bold text-sm mt-1">
+          <span>Total:</span>
+          <span>{formatCurrency(invoice.total)}</span>
+        </div>
+        {invoice.deposit && invoice.deposit > 0 && (
+          <div className="flex justify-between mt-1">
+            <span>Paid:</span>
+            <span>{formatCurrency(invoice.deposit)}</span>
+          </div>
+        )}
+        <div className="flex justify-between mt-1">
+          <span>Due:</span>
+          <span>{formatCurrency(invoice.amountDue || 0)}</span>
+        </div>
+      </div>
+
+      <div className="text-center text-[10px] mt-4">
+        <p>Payment: {invoice.paymentMethod || 'N/A'}</p>
+        <p className="mt-2">Thank you for your business!</p>
+      </div>
     </div>
   )
 });
