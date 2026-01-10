@@ -19,7 +19,7 @@ import type { FirestoreUserProfile } from '@/lib/types';
 import { useUser } from '@/firebase';
 import { Eye, EyeOff } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TemplateEditor } from '@/components/template-editor';
+import { TemplateManagerModal } from '@/components/template-manager-modal';
 import { useSettings } from '@/context/settings-context';
 
 export default function SettingsPage() {
@@ -28,11 +28,8 @@ export default function SettingsPage() {
   const { user } = useUser();
   const {
     receiptTemplate,
-    setReceiptTemplate,
     invoiceTemplate,
-    setInvoiceTemplate,
     labelTemplate,
-    setLabelTemplate
   } = useSettings();
 
   const [profile, setProfile] = useState<Partial<FirestoreUserProfile>>({
@@ -46,10 +43,9 @@ export default function SettingsPage() {
   const [showPin, setShowPin] = useState(false);
   const [showConfirmPin, setShowConfirmPin] = useState(false);
 
-  // Template States
-  const [currentReceiptTemplate, setCurrentReceiptTemplate] = useState(receiptTemplate);
-  const [currentInvoiceTemplate, setCurrentInvoiceTemplate] = useState(invoiceTemplate || '');
-  const [currentLabelTemplate, setCurrentLabelTemplate] = useState(labelTemplate);
+  // Template Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeTemplateType, setActiveTemplateType] = useState<'receipt' | 'invoice' | 'label'>('receipt');
 
   useEffect(() => {
     if (userProfile) {
@@ -98,36 +94,10 @@ export default function SettingsPage() {
     setConfirmPin('');
   };
 
-  const handleSaveTemplates = () => {
-    setReceiptTemplate(currentReceiptTemplate);
-    // If empty string, set to undefined to trigger default component fallback
-    setInvoiceTemplate(currentInvoiceTemplate.trim() === '' ? undefined : currentInvoiceTemplate);
-    setLabelTemplate(currentLabelTemplate);
-
-    toast({
-      title: 'Templates Saved',
-      description: 'Your template changes have been successfully saved.',
-    });
+  const openModal = (type: 'receipt' | 'invoice' | 'label') => {
+    setActiveTemplateType(type);
+    setIsModalOpen(true);
   };
-
-  const receiptPlaceholders = [
-    '{{store_name}}', '{{store_address}}', '{{store_phone}}', '{{store_website}}',
-    '{{invoice.date}}', '{{invoice.id}}', '{{ticket_no}}', '{{customer.name}}',
-    '{{#each items}}', '{{this.name}}', '{{this.quantity}}', '{{this.total}}', '{{/each}}',
-    '{{invoice.subtotal}}', '{{invoice.tax}}', '{{invoice.total}}',
-    '{{invoice.paid}}', '{{invoice.amountDue}}', '{{payment_method}}', '{{footer.message}}'
-  ];
-
-  const invoicePlaceholders = [
-    ...receiptPlaceholders,
-    '{{invoice.dueDate}}', '{{customer.email}}', '{{customer.phone}}', '{{customer.address}}',
-    '{{item.price}}', '{{item.description}}'
-  ];
-
-  const labelPlaceholders = [
-    '{{store_name}}', '{{customer.name}}', '{{order.id}}', '{{item.name}}',
-    '{{item.price}}', '{{date}}'
-  ];
 
   return (
     <DashboardLayout>
@@ -215,55 +185,45 @@ export default function SettingsPage() {
                   Customize the layout and content of your receipts, invoices, and labels.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <Tabs defaultValue="receipt" className="w-full">
-                  <TabsList className="w-full justify-start">
-                    <TabsTrigger value="receipt">Receipt (Thermal)</TabsTrigger>
-                    <TabsTrigger value="invoice">Invoice (A4)</TabsTrigger>
-                    <TabsTrigger value="label">Label</TabsTrigger>
-                  </TabsList>
+              <CardContent className="space-y-6">
 
-                  <TabsContent value="receipt" className="mt-4">
-                    <div className="mb-4 text-sm text-muted-foreground">
-                      Edit the template for 80mm thermal receipts.
-                    </div>
-                    <TemplateEditor
-                      value={currentReceiptTemplate}
-                      onChange={setCurrentReceiptTemplate}
-                      placeholders={receiptPlaceholders}
-                    />
-                  </TabsContent>
+                {/* Receipt Section */}
+                <div className="flex items-center justify-between border-b pb-4">
+                  <div>
+                    <h3 className="text-lg font-medium">Receipt (Thermal)</h3>
+                    <p className="text-sm text-muted-foreground">Edit the template for 80mm thermal receipts.</p>
+                  </div>
+                  <Button variant="outline" onClick={() => openModal('receipt')}>Edit Template</Button>
+                </div>
 
-                  <TabsContent value="invoice" className="mt-4">
-                    <div className="mb-4 text-sm text-muted-foreground">
-                      Edit the template for standard A4 invoices.
-                      <strong className="block mt-1">Note: Leave this empty to use the default professional design.</strong>
-                    </div>
-                    <TemplateEditor
-                      value={currentInvoiceTemplate}
-                      onChange={setCurrentInvoiceTemplate}
-                      placeholders={invoicePlaceholders}
-                    />
-                  </TabsContent>
+                {/* Invoice Section */}
+                <div className="flex items-center justify-between border-b pb-4">
+                  <div>
+                    <h3 className="text-lg font-medium">Invoice (A4)</h3>
+                    <p className="text-sm text-muted-foreground">Edit the standard A4 invoice design.</p>
+                  </div>
+                  <Button variant="outline" onClick={() => openModal('invoice')}>Edit Template</Button>
+                </div>
 
-                  <TabsContent value="label" className="mt-4">
-                    <div className="mb-4 text-sm text-muted-foreground">
-                      Edit the template for item/shipping labels.
-                    </div>
-                    <TemplateEditor
-                      value={currentLabelTemplate}
-                      onChange={setCurrentLabelTemplate}
-                      placeholders={labelPlaceholders}
-                    />
-                  </TabsContent>
-                </Tabs>
+                {/* Label Section */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium">Labels</h3>
+                    <p className="text-sm text-muted-foreground">Edit templates for item and shipping labels.</p>
+                  </div>
+                  <Button variant="outline" onClick={() => openModal('label')}>Edit Template</Button>
+                </div>
+
               </CardContent>
             </Card>
-            <div className="flex justify-end">
-              <Button onClick={handleSaveTemplates}>Save Templates</Button>
-            </div>
           </TabsContent>
         </Tabs>
+
+        <TemplateManagerModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          type={activeTemplateType}
+        />
       </div>
     </DashboardLayout>
   );
