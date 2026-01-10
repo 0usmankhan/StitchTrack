@@ -383,4 +383,32 @@ export interface AppContextType {
   setActiveStore: (store: Store | null) => void;
   addStore: (store: Omit<Store, 'id'>) => Promise<string>;
   deleteStore: (storeId: string) => void;
+  transferOrders: TransferOrder[];
+  addTransferOrder: (order: Omit<TransferOrder, 'id' | 'maskedId' | 'status' | 'createdAt' | 'completedAt'>) => Promise<string>;
+  completeTransferOrder: (orderId: string) => Promise<void>;
+  cancelTransferOrder: (orderId: string) => Promise<void>;
+}
+
+export interface TransferOrder {
+  id: string;
+  maskedId: string;
+  fromStoreId: string;
+  toStoreId: string;
+  fromStoreName: string;
+  toStoreName: string;
+  items: {
+    inventoryItemId: string;
+    name: string;
+    quantity: number;
+  }[];
+  status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  createdAt: any; // Timestamp
+  completedAt?: any; // Timestamp
+  note?: string;
+}
+
+export interface FirestoreTransferOrder extends Omit<TransferOrder, 'id' | 'createdAt' | 'completedAt'> {
+  id: string;
+  createdAt: Timestamp;
+  completedAt?: Timestamp | null;
 }

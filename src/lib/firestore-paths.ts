@@ -18,5 +18,6 @@ export const getTimesheetCollection = (accountId: string) => `accounts/${account
 export const getPurchaseOrdersCollection = (accountId: string) => `accounts/${accountId}/purchaseOrders`;
 export const getGeneralSettingsDocument = (accountId: string) => `accounts/${accountId}/settings/general`;
 export const getStoresCollection = (accountId: string) => `accounts/${accountId}/stores`;
+export const getTransferOrdersCollection = (accountId: string) => `accounts/${accountId}/transferOrders`;
 
 

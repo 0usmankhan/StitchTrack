@@ -17,6 +17,9 @@ import {
   runTransaction,
   increment,
   arrayUnion,
+  getDoc,
+  getDocs,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import type {
@@ -44,6 +47,8 @@ import type {
   ReceptionItem,
   SalaryType,
   PermissionsMap,
+  TransferOrder,
+  FirestoreTransferOrder,
 } from '@/lib/types';
 import {
   useCollection,
@@ -70,6 +75,7 @@ import {
   getUserDocument,
   getTimesheetCollection,
   getStoresCollection,
+  getTransferOrdersCollection,
 } from '@/lib/firestore-paths';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { formatDistanceStrict } from 'date-fns';
@@ -239,12 +245,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!timesheetCollection) return null;
       let q = query(timesheetCollection, orderBy('startTime', 'desc'));
       if (activeStore) {
-        // Note: Firestore requires composite index for 'storeId' + 'startTime'. 
+        // Note: Firestore requires composite index for 'storeId' + 'startTime'.
         // If this fails, we might need to filter client side or add index.
         // For now, let's assume we can filter client side if needed, OR just filter by storeId without order first?
         // Actually, let's keep it simple: Filter by storeId if present.
         // But existing timesheetCollection code had orderBy.
-        // q = query(timesheetCollection, where('storeId', '==', activeStore.id), orderBy('startTime', 'desc')); 
+        // q = query(timesheetCollection, where('storeId', '==', activeStore.id), orderBy('startTime', 'desc'));
         // This WILL require an index. I'll rely on errorEmitter to tell me if index is needed.
       }
       return q;
@@ -306,6 +312,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       settings: { read: true, write: true, delete: true },
       customization: { read: true, write: true, delete: true },
       purchaseOrders: { read: true, write: true, delete: true },
+      // @ts-ignore - Extension
+      transferOrders: { read: true, write: true, delete: true },
     };
 
     // If no user or data yet, default to full access (safest fallback for owner, strictly guarded by auth anyway)
@@ -631,7 +639,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       startTime: Timestamp.now(),
       endTime: null,
       notes: '',
-    }; // Timesheets might not be store-specific in this model unless we add storeId field to TimesheetEntry type and logic. 
+    }; // Timesheets might not be store-specific in this model unless we add storeId field to TimesheetEntry type and logic.
     // I'll skip storeId here for now to avoid breaking existing timesheet types unless I updated them?
     // Checked types.ts: FirestoreTimesheetEntry does NOT have storeId yet.
     // So timesheets remain global per account for now unless I update the type.
@@ -668,6 +676,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         settings: { read: false, write: false, delete: false },
         customization: { read: false, write: false, delete: false },
         purchaseOrders: { read: false, write: false, delete: false },
+        // @ts-ignore
+        transferOrders: { read: false, write: false, delete: false },
       },
     };
     addDocumentNonBlocking(rolesCol, newRole);
@@ -829,6 +839,236 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, [membershipsData, rolesData]);
 
+  const [transferOrders, setTransferOrders] = useState<TransferOrder[]>([]);
+  const transferOrdersCollectionRef = useMemoFirebase(
+    () => (firestore && accountId ? collection(firestore, getTransferOrdersCollection(accountId)) : null),
+    [firestore, accountId]
+  );
+  const { data: rawTransferOrders } = useCollection<FirestoreTransferOrder>(transferOrdersCollectionRef);
+
+  useEffect(() => {
+    if (rawTransferOrders) {
+      const loadedOps: TransferOrder[] = rawTransferOrders.map(d => ({
+        ...d,
+        id: d.id,
+        maskedId: d.maskedId,
+        createdAt: d.createdAt instanceof Timestamp ? d.createdAt.toDate().toISOString() : String(d.createdAt),
+        completedAt: d.completedAt instanceof Timestamp ? d.completedAt.toDate().toISOString() : (d.completedAt || null),
+      } as TransferOrder));
+      // Filter by store context IF needed.
+      // For Transfers, seeing incoming/outgoing for the active store is useful.
+      // Or seeing all if "All" was an option (removed now).
+
+      if (activeStore) {
+        const filtered = loadedOps.filter(
+          op => op.fromStoreId === activeStore.id || op.toStoreId === activeStore.id
+        );
+        setTransferOrders(filtered);
+      } else {
+        // If no store active (edge case), show none or all?
+        // Logic enforces active store, but good to be safe.
+        // Let's show all if for some reason activeStore is null
+        setTransferOrders(loadedOps);
+      }
+    }
+  }, [rawTransferOrders, activeStore]);
+
+  // Inventory Helper
+  const getInventoryItemRef = (accountId: string, itemId: string) =>
+    doc(firestore!, getInventoryCollection(accountId), itemId);
+
+  const addTransferOrder = async (orderData: Omit<TransferOrder, 'id' | 'maskedId' | 'status' | 'createdAt' | 'completedAt'>) => {
+    if (!accountId || !firestore) return '';
+
+    const batch = writeBatch(firestore);
+
+    // 1. Generate ID and Ref
+    const newDocRef = doc(collection(firestore, getTransferOrdersCollection(accountId)));
+    const maskedId = `TO-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // 2. Prepare Transfer Document
+    const transferOrder: FirestoreTransferOrder = {
+      ...orderData,
+      id: newDocRef.id,
+      maskedId: maskedId,
+      status: 'PENDING',
+      createdAt: serverTimestamp() as unknown as Timestamp,
+      completedAt: null,
+    };
+
+    // 3. Deduct Inventory from Source Store (Optimistic / Batch)
+    // IMPORTANT: For strict consistency, we should use runTransaction.
+    // However, hooks + transaction is complex. Use transaction for the whole operation.
+
+    try {
+      await runTransaction(firestore, async (transaction) => {
+        // Check sufficiency first
+        for (const item of orderData.items) {
+          const itemRef = getInventoryItemRef(accountId, item.inventoryItemId);
+          const itemDoc = await transaction.get(itemRef);
+          if (!itemDoc.exists()) throw new Error(`Item ${item.name} not found`);
+
+          const data = itemDoc.data();
+          const currentStock = (data as any).stock || (data as any).quantity || 0;
+          if (currentStock < item.quantity) {
+            throw new Error(`Insufficient stock for ${item.name} in source store.`);
+          }
+
+          // Deduct
+          transaction.update(itemRef, { quantity: currentStock - item.quantity });
+        }
+
+        // Create Transfer Order
+        transaction.set(newDocRef, transferOrder);
+      });
+
+      toast({ title: 'Transfer Created', description: `Transfer ${maskedId} created successfully.` });
+      return newDocRef.id;
+
+    } catch (e: any) {
+      console.error("Transfer Error", e);
+      toast({ variant: 'destructive', title: 'Transfer Failed', description: e.message });
+      throw e;
+    }
+  };
+
+
+  const handleCompleteTransfer = async (orderId: string) => {
+    if (!accountId || !firestore) return;
+
+    // 1. Fetch Order
+    const orderSnap = await getDoc(doc(firestore, getTransferOrdersCollection(accountId), orderId));
+    if (!orderSnap.exists()) {
+      toast({ variant: 'destructive', title: 'Transfer Failed', description: 'Transfer order not found.' });
+      return;
+    }
+    const order = orderSnap.data() as FirestoreTransferOrder;
+
+    // 2. Fetch Destination Inventory to find matches
+    // (Inefficient for huge inventory, but ok for now)
+    // Ideally we query by SKU for each item.
+    // Let's try to find matches by SKU.
+
+    const itemsToProcess: {
+      transferItem: { inventoryItemId: string; name: string; quantity: number }; // Explicit type
+      sourceDetails: FirestoreInventoryItem;
+      targetId: string | null;
+      isNew: boolean;
+    }[] = [];
+
+    for (const item of order.items) {
+      // Get source item details (to get SKU/Cost etc)
+      const sourceItemSnap = await getDoc(doc(firestore, getInventoryCollection(accountId), item.inventoryItemId));
+      const sourceItem = sourceItemSnap.data() as FirestoreInventoryItem;
+
+      if (!sourceItem) {
+        console.warn(`Source item ${item.inventoryItemId} not found for transfer ${orderId}. Skipping.`);
+        continue; // Skip if source gone?
+      }
+
+      // Find match in destination
+      // We can use a query here.
+      const q = query(
+        collection(firestore, getInventoryCollection(accountId)),
+        where('storeId', '==', order.toStoreId),
+        where('sku', '==', sourceItem.sku)
+      );
+      const querySnap = await getDocs(q);
+
+      let targetId = null;
+      let isNew = false;
+
+      if (!querySnap.empty) {
+        targetId = querySnap.docs[0].id;
+      } else {
+        // Need to create new item in destination
+        isNew = true;
+      }
+
+      itemsToProcess.push({
+        transferItem: item,
+        sourceDetails: sourceItem,
+        targetId,
+        isNew
+      });
+    }
+
+    // 3. Run Transaction
+    try {
+      await runTransaction(firestore, async (transaction) => {
+        const orderRef = doc(firestore, getTransferOrdersCollection(accountId), orderId);
+        const sfOrder = await transaction.get(orderRef);
+        if (!sfOrder.exists()) throw "Order does not exist!";
+        if (sfOrder.data().status !== 'PENDING') throw "Order not pending!";
+
+        for (const p of itemsToProcess) {
+          if (p.isNew) {
+            // Create new doc ref
+            const newRef = doc(collection(firestore, getInventoryCollection(accountId)));
+            transaction.set(newRef, {
+              ...p.sourceDetails,
+              id: newRef.id, // Ensure ID is set for the new document
+              storeId: order.toStoreId,
+              stock: p.transferItem.quantity, // Init with transferred qty
+              location: '', // Clear specific shelf location?
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+          } else if (p.targetId) {
+            const targetRef = doc(firestore, getInventoryCollection(accountId), p.targetId);
+            const targetDoc = await transaction.get(targetRef);
+            const current = targetDoc.data()?.stock || 0; // Assuming 'stock' field
+            transaction.update(targetRef, { stock: current + p.transferItem.quantity, updatedAt: serverTimestamp() });
+          }
+        }
+
+        transaction.update(orderRef, {
+          status: 'COMPLETED',
+          // @ts-ignore
+          completedAt: serverTimestamp()
+        });
+      });
+      toast({ title: 'Transfer Received', description: 'Inventory has been updated.' });
+    } catch (e: any) {
+      console.error("Transaction failed: ", e);
+      toast({ variant: 'destructive', title: 'Transfer Failed', description: e.message || 'Could not complete transfer.' });
+    }
+  };
+
+
+  const cancelTransferOrder = async (orderId: string) => {
+    if (!accountId || !firestore) return;
+
+    try {
+      await runTransaction(firestore, async (transaction) => {
+        const orderRef = doc(firestore, getTransferOrdersCollection(accountId), orderId);
+        const orderDoc = await transaction.get(orderRef);
+        if (!orderDoc.exists() || orderDoc.data().status !== 'PENDING') throw "Invalid transfer status or order not found.";
+
+        const order = orderDoc.data() as FirestoreTransferOrder;
+
+        // Return stock to source
+        for (const item of order.items) {
+          const itemRef = doc(firestore, getInventoryCollection(accountId), item.inventoryItemId);
+          const itemSnap = await transaction.get(itemRef);
+          if (itemSnap.exists()) {
+            const data = itemSnap.data();
+            const current = (data as any).quantity || 0;
+            // @ts-ignore
+            transaction.update(itemRef, { quantity: current + item.quantity, updatedAt: serverTimestamp() });
+          }
+          // If source item deleted, we might lose stock tracking. Edge case.
+        }
+
+        // @ts-ignore
+        transaction.update(orderRef, { status: 'CANCELLED', completedAt: serverTimestamp() });
+      });
+      toast({ title: 'Transfer Cancelled', description: 'Stock returned to source.' });
+    } catch (e: any) {
+      console.error("Transaction failed: ", e);
+      toast({ variant: 'destructive', title: 'Transfer Failed', description: e.message || 'Could not cancel transfer.' });
+    }
+  };
 
   return (
     <AppContext.Provider
@@ -871,6 +1111,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setActiveStore,
         addStore,
         deleteStore,
+        transferOrders,
+        addTransferOrder,
+        completeTransferOrder: handleCompleteTransfer,
+        cancelTransferOrder
       }}
     >
       {children}

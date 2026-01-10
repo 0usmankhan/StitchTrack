@@ -25,6 +25,7 @@ import {
   Sun,
   Clock,
   ClipboardList,
+  ArrowLeftRight,
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -368,14 +369,24 @@ export default function DashboardLayout({
               </SidebarMenuItem>
             )}
             {permissions?.inventory?.read && (
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href="/inventory">
-                    <Warehouse />
-                    <span>Inventory</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              <>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link href="/inventory">
+                      <Warehouse />
+                      <span>Inventory</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link href="/inventory/transfers">
+                      <ArrowLeftRight />
+                      <span>Transfers</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </>
             )}
             {permissions?.reports?.read && (
               <SidebarMenuItem>
