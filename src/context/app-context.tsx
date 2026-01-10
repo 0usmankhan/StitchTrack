@@ -131,10 +131,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Try localStorage first.
     if (stores.length > 0) {
       const savedId = localStorage.getItem('stitchtrack-active-store');
-      if (savedId === 'ALL') {
-        if (activeStore !== null) setActiveStoreState(null);
-        return;
-      }
       if (savedId) {
         const found = stores.find(s => s.id === savedId);
         if (found) {
@@ -143,19 +139,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
       // Fallback to first store if no saved store or saved store not found
-      // Only if NOT explicitly set to ALL (which is handled above)
-      if (!activeStore && savedId !== 'ALL') {
+      if (!activeStore) {
         setActiveStoreState(stores[0]);
       }
     }
   }, [stores, activeStore]);
 
   const setActiveStore = (store: Store | null) => {
+    // We expect store to be non-null in the new logic, but keeping type flexible for safety
+    if (!store && stores.length > 0) return; // Prevent setting null if stores exist
     setActiveStoreState(store);
-    localStorage.setItem('stitchtrack-active-store', store ? store.id : 'ALL');
-    toast({
-      title: `Switched to ${store ? store.name : 'All Locations'}`,
-    });
+    if (store) {
+      localStorage.setItem('stitchtrack-active-store', store.id);
+      toast({
+        title: `Switched to ${store.name}`,
+      });
+    }
   };
 
   const addStore = async (store: Omit<Store, 'id'>) => {

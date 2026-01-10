@@ -244,10 +244,6 @@ function StoreSwitcher() {
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Switch Location</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => setActiveStore(null)}>
-          {!activeStore && <span className="mr-2">✓</span>}
-          All Locations
-        </DropdownMenuItem>
         {stores.map(store => (
           <DropdownMenuItem key={store.id} onClick={() => setActiveStore(store)}>
             {activeStore?.id === store.id && <span className="mr-2">✓</span>}
