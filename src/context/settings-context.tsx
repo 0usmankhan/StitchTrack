@@ -53,6 +53,21 @@ Payment Method: {{payment_method}}
         {{footer.message}}
 `;
 
+const defaultInvoiceTemplate = undefined; // Undefined means it uses the React component by default
+
+const defaultLabelTemplate = `
+<div style="width: 100mm; height: 50mm; padding: 5mm; border: 1px solid black; font-family: sans-serif; display: flex; flex-direction: column; justify-content: space-between;">
+  <div style="text-align: center; font-weight: bold; font-size: 16px;">{{store_name}}</div>
+  <div style="font-size: 12px;">
+    <strong>Customer:</strong> {{customer.name}}<br/>
+    <strong>Order:</strong> {{order.id}}
+  </div>
+  <div style="text-align: center; font-size: 10px;">
+    {{item.name}}
+  </div>
+</div>
+`;
+
 
 interface SettingsContextType {
   taxRate: number;
@@ -71,6 +86,10 @@ interface SettingsContextType {
   setReceiptTemplate: (template: string) => void;
   storeDetails: StoreDetails;
   setStoreDetails: React.Dispatch<React.SetStateAction<StoreDetails>>;
+  invoiceTemplate: string | undefined;
+  setInvoiceTemplate: (template: string | undefined) => void;
+  labelTemplate: string;
+  setLabelTemplate: (template: string) => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(
@@ -126,6 +145,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<NotificationSettings>(initialNotifications);
   const [receiptTemplate, setReceiptTemplate] = useState<string>(defaultReceiptTemplate);
   const [storeDetails, setStoreDetails] = useState<StoreDetails>(initialStoreDetails);
+  const [invoiceTemplate, setInvoiceTemplate] = useState<string | undefined>(defaultInvoiceTemplate);
+  const [labelTemplate, setLabelTemplate] = useState<string>(defaultLabelTemplate);
 
 
   return (
@@ -147,6 +168,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setReceiptTemplate,
         storeDetails,
         setStoreDetails,
+        invoiceTemplate,
+        setInvoiceTemplate,
+        labelTemplate,
+        setLabelTemplate,
       }}
     >
       {children}

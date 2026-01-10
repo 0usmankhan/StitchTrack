@@ -12,24 +12,33 @@ interface PrintableReceiptProps {
 }
 
 export const PrintableReceipt = forwardRef<HTMLDivElement, PrintableReceiptProps>(({ invoice, customTemplate }, ref) => {
-  const { receiptTemplate: savedTemplate } = useSettings();
+  const { receiptTemplate: savedTemplate, storeDetails } = useSettings();
   const templateToUse = customTemplate ?? savedTemplate;
+
+  const formatDate = (date: any) => {
+    try {
+      if (!date) return 'N/A';
+      if (typeof date === 'string') return format(parseISO(date), 'MM/dd/yyyy h:mm a');
+      if (date.toDate) return format(date.toDate(), 'MM/dd/yyyy h:mm a');
+      if (date instanceof Date) return format(date, 'MM/dd/yyyy h:mm a');
+      if (date.seconds) return format(new Date(date.seconds * 1000), 'MM/dd/yyyy h:mm a');
+      return format(new Date(date), 'MM/dd/yyyy h:mm a');
+    } catch {
+      return 'Invalid Date';
+    }
+  };
 
   function renderTemplate(templateStr: string, invoiceData: Invoice) {
     let output = templateStr;
-    
+
     // Simple replacements
-    output = output.replace(/\{\{store_name\}\}/g, "StitchTrack POS");
-    output = output.replace(/\{\{store_address\}\}/g, "123 Main Street, Anytown, USA");
-    output = output.replace(/\{\{store_phone\}\}/g, "555-123-4567");
-    output = output.replace(/\{\{store_website\}\}/g, "www.stitchtrack.com");
+    output = output.replace(/\{\{store_name\}\}/g, storeDetails.name);
+    output = output.replace(/\{\{store_address\}\}/g, storeDetails.address);
+    output = output.replace(/\{\{store_phone\}\}/g, storeDetails.phone);
+    output = output.replace(/\{\{store_website\}\}/g, storeDetails.website);
     output = output.replace(/\{\{invoice.id\}\}/g, invoiceData.maskedId);
-    
-    try {
-      output = output.replace(/\{\{invoice.date\}\}/g, format(parseISO(invoiceData.date), 'MM/dd/yyyy h:mm a'));
-    } catch(e) {
-      output = output.replace(/\{\{invoice.date\}\}/g, new Date(invoiceData.date).toLocaleString());
-    }
+
+    output = output.replace(/\{\{invoice.date\}\}/g, formatDate(invoiceData.date));
 
     output = output.replace(/\{\{customer.name\}\}/g, invoiceData.customer.name);
     output = output.replace(/\{\{invoice.subtotal\}\}/g, formatCurrency(invoiceData.subtotal));
@@ -39,7 +48,7 @@ export const PrintableReceipt = forwardRef<HTMLDivElement, PrintableReceiptProps
     output = output.replace(/\{\{payment_method\}\}/g, invoiceData.paymentMethod || 'N/A');
     output = output.replace(/\{\{ticket_no\}\}/g, invoiceData.items?.[0]?.orderId?.substring(0, 8) || 'N/A');
     output = output.replace(/\{\{footer.message\}\}/g, "Thank you for your business!");
-  
+
     const ifPaidRegex = /\{\{#if invoice.paid\}\}([\s\S]*?)\{\{\/if\}\}/g;
     if (invoiceData.deposit && invoiceData.deposit > 0) {
       output = output.replace(ifPaidRegex, (match, content) => content);
@@ -47,22 +56,22 @@ export const PrintableReceipt = forwardRef<HTMLDivElement, PrintableReceiptProps
     } else {
       output = output.replace(ifPaidRegex, '');
     }
-  
+
     const itemsRegex = /\{\{#each items\}\}([\s\S]*?)\{\{\/each\}\}/g;
     const itemMatch = itemsRegex.exec(output);
     if (itemMatch) {
-        const itemTemplate = itemMatch[1];
-        const itemsHtml = invoiceData.items.map((item: any) => {
-            let name = item.name.padEnd(12);
-            let qty = item.quantity.toString().padEnd(16);
-            return itemTemplate
-                .replace(/\{\{this.name\}\}/g, name)
-                .replace(/\{\{this.quantity\}\}/g, qty)
-                .replace(/\{\{this.total\}\}/g, formatCurrency(item.total));
-        }).join('\n');
-        output = output.replace(itemsRegex, itemsHtml);
+      const itemTemplate = itemMatch[1];
+      const itemsHtml = invoiceData.items.map((item: any) => {
+        let name = item.name.padEnd(12);
+        let qty = item.quantity.toString().padEnd(16);
+        return itemTemplate
+          .replace(/\{\{this.name\}\}/g, name)
+          .replace(/\{\{this.quantity\}\}/g, qty)
+          .replace(/\{\{this.total\}\}/g, formatCurrency(item.total));
+      }).join('\n');
+      output = output.replace(itemsRegex, itemsHtml);
     }
-  
+
     return output;
   }
 

@@ -10,7 +10,7 @@ interface StandardInvoiceProps {
 }
 
 export const StandardInvoice = forwardRef<HTMLDivElement, StandardInvoiceProps>(({ invoice }, ref) => {
-    const { storeDetails } = useSettings();
+    const { storeDetails, invoiceTemplate } = useSettings();
 
     const formatDate = (date: any) => {
         try {
@@ -26,6 +26,61 @@ export const StandardInvoice = forwardRef<HTMLDivElement, StandardInvoiceProps>(
             return 'Invalid Date';
         }
     };
+
+    if (invoiceTemplate) {
+        let output = invoiceTemplate;
+        // Basic Intepolation
+        output = output.replace(/\{\{store_name\}\}/g, storeDetails.name);
+        output = output.replace(/\{\{store_address\}\}/g, storeDetails.address);
+        output = output.replace(/\{\{store_phone\}\}/g, storeDetails.phone);
+        output = output.replace(/\{\{store_website\}\}/g, storeDetails.website);
+
+        output = output.replace(/\{\{invoice.id\}\}/g, invoice.maskedId);
+        output = output.replace(/\{\{invoice.date\}\}/g, formatDate(invoice.date));
+        output = output.replace(/\{\{invoice.dueDate\}\}/g, formatDate(invoice.dueDate));
+        output = output.replace(/\{\{customer.name\}\}/g, invoice.customer.name);
+        output = output.replace(/\{\{customer.email\}\}/g, invoice.customer.email || '');
+        output = output.replace(/\{\{customer.phone\}\}/g, invoice.customer.phone || '');
+        output = output.replace(/\{\{customer.address\}\}/g, invoice.customer.address || ''); // Added address
+
+        output = output.replace(/\{\{invoice.subtotal\}\}/g, formatCurrency(invoice.subtotal));
+        output = output.replace(/\{\{invoice.tax\}\}/g, formatCurrency(invoice.tax));
+        output = output.replace(/\{\{invoice.total\}\}/g, formatCurrency(invoice.total));
+        output = output.replace(/\{\{invoice.amountDue\}\}/g, formatCurrency(invoice.amountDue ?? 0));
+        output = output.replace(/\{\{invoice.paid\}\}/g, formatCurrency(invoice.deposit || 0));
+
+        // Items Loop
+        const itemsRegex = /\{\{#each items\}\}([\s\S]*?)\{\{\/each\}\}/g;
+        const itemMatch = itemsRegex.exec(output);
+        if (itemMatch) {
+            const itemTemplate = itemMatch[1];
+            const itemsHtml = invoice.items.map((item) => {
+                return itemTemplate
+                    .replace(/\{\{this.name\}\}/g, item.name)
+                    .replace(/\{\{this.quantity\}\}/g, item.quantity.toString())
+                    .replace(/\{\{this.price\}\}/g, formatCurrency(item.price)) // Added price
+                    .replace(/\{\{this.total\}\}/g, formatCurrency(item.total));
+            }).join('');
+            output = output.replace(itemsRegex, itemsHtml);
+        }
+
+        // Remove loop tags if they still exist (case where no items loop was found irrelevant if we matched above, but good for cleanup)
+        // Actually the replacement above consumes the tags. 
+
+        return (
+            <div ref={ref} className="bg-white text-black p-8 font-sans max-w-[210mm] mx-auto min-h-[297mm] relative invoice-template-container">
+                <div dangerouslySetInnerHTML={{ __html: output }} />
+                <style jsx global>{`
+                    .invoice-template-container img { max-width: 100%; }
+                    @media print {
+                        .invoice-template-container { 
+                            -webkit-print-color-adjust: exact; 
+                        }
+                    }
+                `}</style>
+            </div>
+        );
+    }
 
     return (
         <div ref={ref} className="bg-white text-black p-8 font-sans max-w-[210mm] mx-auto min-h-[297mm] relative">
