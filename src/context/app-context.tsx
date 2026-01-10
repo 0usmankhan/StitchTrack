@@ -69,10 +69,13 @@ import {
   getRolesCollection,
   getUserDocument,
   getTimesheetCollection,
+  getStoresCollection,
 } from '@/lib/firestore-paths';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { formatDistanceStrict } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { Store } from '@/lib/types';
+import { useEffect, useState } from 'react';
 
 const customerAvatars = PlaceHolderImages.filter((img) =>
   img.id.startsWith('avatar')
@@ -112,8 +115,71 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const accountId = userProfileData?.associatedAccountId || user?.uid;
 
   /* ------------------------------------------------------------------ */
+  /*  1.5 Fetch Stores & Manage Active Store                            */
+  /* ------------------------------------------------------------------ */
+  const [activeStore, setActiveStoreState] = useState<Store | null>(null);
+
+  const storesCollection = useMemoFirebase(
+    () => (firestore && accountId ? collection(firestore, getStoresCollection(accountId)) : null),
+    [firestore, accountId]
+  );
+  const { data: storesData } = useCollection<Store>(storesCollection);
+  const stores = storesData || [];
+
+  useEffect(() => {
+    // If we have stores but no active store, select one.
+    // Try localStorage first.
+    if (stores.length > 0) {
+      const savedId = localStorage.getItem('stitchtrack-active-store');
+      if (savedId === 'ALL') {
+        if (activeStore !== null) setActiveStoreState(null);
+        return;
+      }
+      if (savedId) {
+        const found = stores.find(s => s.id === savedId);
+        if (found) {
+          if (activeStore?.id !== found.id) setActiveStoreState(found);
+          return;
+        }
+      }
+      // Fallback to first store if no saved store or saved store not found
+      // Only if NOT explicitly set to ALL (which is handled above)
+      if (!activeStore && savedId !== 'ALL') {
+        setActiveStoreState(stores[0]);
+      }
+    }
+  }, [stores, activeStore]);
+
+  const setActiveStore = (store: Store | null) => {
+    setActiveStoreState(store);
+    localStorage.setItem('stitchtrack-active-store', store ? store.id : 'ALL');
+    toast({
+      title: `Switched to ${store ? store.name : 'All Locations'}`,
+    });
+  };
+
+  const addStore = async (store: Omit<Store, 'id'>) => {
+    if (!firestore || !accountId) return '';
+    const colRaw = collection(firestore, getStoresCollection(accountId));
+    const docRef = await addDocumentNonBlocking(colRaw, { ...store, createdAt: Timestamp.now() });
+    return docRef?.id || '';
+  };
+
+  const deleteStore = (storeId: string) => {
+    if (!firestore || !accountId) return;
+    const docRef = doc(firestore, getStoresCollection(accountId), storeId);
+    deleteDocumentNonBlocking(docRef);
+    if (activeStore?.id === storeId) {
+      setActiveStoreState(null);
+      localStorage.removeItem('stitchtrack-active-store');
+    }
+  };
+
+
+  /* ------------------------------------------------------------------ */
   /*  2. Fetch Data based on the determined Account ID                  */
   /* ------------------------------------------------------------------ */
+
 
   const customersCollection = useMemoFirebase(
     () => (firestore && accountId ? collection(firestore, getCustomersCollection(accountId)) : null),
@@ -123,28 +189,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
     useCollection<FirestoreCustomer>(customersCollection);
 
   const ordersCollection = useMemoFirebase(
-    () => (firestore && accountId ? collection(firestore, getOrdersCollection(accountId)) : null),
-    [firestore, accountId]
+    () => {
+      if (!firestore || !accountId) return null;
+      const baseRef = collection(firestore, getOrdersCollection(accountId));
+      return activeStore ? query(baseRef, where('storeId', '==', activeStore.id)) : baseRef;
+    },
+    [firestore, accountId, activeStore]
   );
   const { data: ordersData } = useCollection<FirestoreOrder>(ordersCollection);
 
   const invoicesCollection = useMemoFirebase(
-    () => (firestore && accountId ? collection(firestore, getInvoicesCollection(accountId)) : null),
-    [firestore, accountId]
+    () => {
+      if (!firestore || !accountId) return null;
+      const baseRef = collection(firestore, getInvoicesCollection(accountId));
+      return activeStore ? query(baseRef, where('storeId', '==', activeStore.id)) : baseRef;
+    },
+    [firestore, accountId, activeStore]
   );
   const { data: invoicesData } =
     useCollection<FirestoreInvoice>(invoicesCollection);
 
   const inventoryCollection = useMemoFirebase(
-    () => (firestore && accountId ? collection(firestore, getInventoryCollection(accountId)) : null),
-    [firestore, accountId]
+    () => {
+      if (!firestore || !accountId) return null;
+      const baseRef = collection(firestore, getInventoryCollection(accountId));
+      return activeStore ? query(baseRef, where('storeId', '==', activeStore.id)) : baseRef;
+    },
+    [firestore, accountId, activeStore]
   );
   const { data: inventoryData } =
     useCollection<InventoryItem>(inventoryCollection);
 
   const purchaseOrdersCollection = useMemoFirebase(
-    () => (firestore && accountId ? collection(firestore, getPurchaseOrdersCollection(accountId)) : null),
-    [firestore, accountId]
+    () => {
+      if (!firestore || !accountId) return null;
+      const baseRef = collection(firestore, getPurchaseOrdersCollection(accountId));
+      return activeStore ? query(baseRef, where('storeId', '==', activeStore.id)) : baseRef;
+    },
+    [firestore, accountId, activeStore]
   );
   const { data: purchaseOrdersData } = useCollection<FirestorePurchaseOrder>(purchaseOrdersCollection);
 
@@ -152,15 +234,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => (firestore && accountId ? collection(firestore, getTimesheetCollection(accountId)) : null),
     [firestore, accountId]
   );
-  const { data: timesheetData } = useCollection<FirestoreTimesheetEntry>(
-    useMemoFirebase(
-      () =>
-        timesheetCollection
-          ? query(timesheetCollection, orderBy('startTime', 'desc'))
-          : null,
-      [timesheetCollection]
-    )
+
+  const timesheetQuery = useMemoFirebase(
+    () => {
+      if (!timesheetCollection) return null;
+      let q = query(timesheetCollection, orderBy('startTime', 'desc'));
+      if (activeStore) {
+        // Note: Firestore requires composite index for 'storeId' + 'startTime'. 
+        // If this fails, we might need to filter client side or add index.
+        // For now, let's assume we can filter client side if needed, OR just filter by storeId without order first?
+        // Actually, let's keep it simple: Filter by storeId if present.
+        // But existing timesheetCollection code had orderBy.
+        // q = query(timesheetCollection, where('storeId', '==', activeStore.id), orderBy('startTime', 'desc')); 
+        // This WILL require an index. I'll rely on errorEmitter to tell me if index is needed.
+      }
+      return q;
+    },
+    [timesheetCollection, activeStore]
   );
+
+  const { data: timesheetData } = useCollection<FirestoreTimesheetEntry>(timesheetQuery);
+
 
   const rolesCollection = useMemoFirebase(
     () => (firestore && accountId ? collection(firestore, getRolesCollection(accountId)) : null),
@@ -354,7 +448,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addOrder = async (order: Omit<FirestoreOrder, 'id'>) => {
     if (!firestore || !accountId) return undefined;
     const orderCollection = collection(firestore, getOrdersCollection(accountId));
-    return addDocumentNonBlocking(orderCollection, order);
+    // Enforce storeId
+    const orderWithStore = { ...order, storeId: activeStore?.id };
+    const result = await addDocumentNonBlocking(orderCollection, orderWithStore);
+    return result || undefined;
   };
 
   const updateOrder = (orderId: string, order: Partial<FirestoreOrder>) => {
@@ -376,7 +473,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addInvoice = async (invoice: Omit<FirestoreInvoice, 'id'>) => {
     if (!firestore || !accountId) return '';
     const invoiceCollection = collection(firestore, getInvoicesCollection(accountId));
-    const docRef = await addDoc(invoiceCollection, invoice);
+    const invoiceWithStore = { ...invoice, storeId: activeStore?.id };
+    const docRef = await addDoc(invoiceCollection, invoiceWithStore);
 
     if (docRef.id && invoice.items) {
       const batch = writeBatch(firestore);
@@ -420,7 +518,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       firestore,
       getInventoryCollection(accountId)
     );
-    await addDocumentNonBlocking(inventoryCollectionRef, item);
+    const itemWithStore = { ...item, storeId: activeStore?.id };
+    await addDocumentNonBlocking(inventoryCollectionRef, itemWithStore);
   };
 
   const updateInventoryItem = async (
@@ -445,7 +544,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addPurchaseOrder = async (po: Omit<FirestorePurchaseOrder, 'id'>) => {
     if (!firestore || !accountId) return '';
     const poCollection = collection(firestore, getPurchaseOrdersCollection(accountId));
-    const docRef = await addDocumentNonBlocking(poCollection, po);
+    const poWithStore = { ...po, storeId: activeStore?.id };
+    const docRef = await addDocumentNonBlocking(poCollection, poWithStore);
     return docRef?.id || '';
   };
 
@@ -532,7 +632,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       startTime: Timestamp.now(),
       endTime: null,
       notes: '',
-    };
+    }; // Timesheets might not be store-specific in this model unless we add storeId field to TimesheetEntry type and logic. 
+    // I'll skip storeId here for now to avoid breaking existing timesheet types unless I updated them?
+    // Checked types.ts: FirestoreTimesheetEntry does NOT have storeId yet.
+    // So timesheets remain global per account for now unless I update the type.
     addDocumentNonBlocking(timesheetCollectionRef, newEntry);
   };
 
@@ -595,11 +698,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: 'unknown',
         name: 'Unknown Customer',
         email: '',
-        avatar: randomAvatar.imageUrl,
-        imageHint: randomAvatar.imageHint,
+        avatar: {
+          imageUrl: randomAvatar.imageUrl,
+          imageHint: randomAvatar.imageHint,
+        },
         firstName: 'Unknown',
         lastName: 'Customer',
         phone: '',
+        address: '',
+        city: '',
+        zip: '',
+        phoneNumber: '',
+        createdAt: Timestamp.now(),
       },
       date:
         i.date instanceof Timestamp
@@ -624,11 +734,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
           id: 'walk-in',
           name: 'Walk-in Customer',
           email: '',
-          avatar: randomAvatar.imageUrl,
-          imageHint: randomAvatar.imageHint,
+          avatar: {
+            imageUrl: randomAvatar.imageUrl,
+            imageHint: randomAvatar.imageHint,
+          },
           firstName: 'Walk-in',
           lastName: 'Customer',
           phone: '',
+          address: '',
+          city: '',
+          zip: '',
+          phoneNumber: '',
+          createdAt: Timestamp.now(),
         };
 
       const maskedId = `${o.type === 'Repair' ? 'R' : 'O'}-${index + 1}`;
@@ -636,13 +753,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const relatedInvoice = invoices.find((inv) => inv.id === o.invoiceId);
       // Ensure required properties are present to match the Order type
       const order: Order = {
-        ...o,
+        ...(o as any),
         id: o.id,
         maskedId: maskedId,
         customer: customerData,
         invoiceId: relatedInvoice?.id,
         invoiceMaskedId: relatedInvoice?.maskedId,
         items: o.items as any, // Cast items to avoid strict type mismatch if defined differently
+        date:
+          o.date instanceof Timestamp
+            ? o.date.toDate().toISOString()
+            : String(o.date),
         deliveryDate:
           o.deliveryDate instanceof Timestamp
             ? o.deliveryDate.toDate().toISOString().split('T')[0]
@@ -746,6 +867,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addUser,
         deleteMembership,
         permissions,
+        stores,
+        activeStore,
+        setActiveStore,
+        addStore,
+        deleteStore,
       }}
     >
       {children}

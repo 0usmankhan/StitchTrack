@@ -87,14 +87,29 @@ export interface FirestoreUserProfile {
 }
 
 
+export interface Store {
+  id: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  createdAt: any; // Timestamp
+}
+
 export interface FirestoreCustomer {
   firstName: string;
   lastName: string;
   email: string;
-  phone?: string;
-  address?: string;
-  avatar: string;
-  imageHint: string;
+  phoneNumber: string;
+  address: string;
+  city: string;
+  zip: string;
+  notes?: string;
+  createdAt: Timestamp;
+  avatar?: {
+    imageUrl: string;
+    imageHint: string;
+  };
+  storeId?: string; // Optional: customer associated with a specific store
 }
 
 export type FulfillmentStatus = 'Fulfilled' | 'Backordered' | 'Returned';
@@ -112,6 +127,7 @@ export interface OrderItem {
 
 export interface FirestoreOrder {
   customerId: string;
+  date: Timestamp;
   invoiceId?: string; // Link to the invoice
   type: 'Order' | 'Repair' | 'Shipped';
   stitchTypes?: string;
@@ -124,12 +140,24 @@ export interface FirestoreOrder {
   materialCost?: number;
   materialIds?: string[]; // Array of inventory item IDs
   items?: OrderItem[];
+  subtotal: number;
+  tax: number;
+  discount: number;
+  total: number;
+  paymentStatus: 'paid' | 'unpaid' | 'partial';
+  paymentMethod: 'cash' | 'credit_card' | 'debit_card' | 'online';
+  notes?: string;
+  measurements?: Record<string, number>;
+  storeId?: string;
   completionTimestamps?: {
     designComplete?: string;
     stitchingComplete?: string;
     qualityCheckComplete?: string;
   };
 }
+
+
+
 
 export interface InvoiceItem {
   id: string; // This can be an inventory ID or a unique ID for a custom item/repair
@@ -141,30 +169,43 @@ export interface InvoiceItem {
 }
 
 export interface FirestoreInvoice {
+
+  orderId: string;
   customerId: string;
-  date: Timestamp | string;
-  dueDate: Timestamp | string;
-  status: InvoiceStatus;
-  items: InvoiceItem[];
+  date: Timestamp; // Timestamp
+  dueDate: Timestamp; // Timestamp
+  items: InvoiceItem[]; // Changed from OrderItem[] to InvoiceItem[] based on existing InvoiceItem
   subtotal: number;
   tax: number;
+  discount: number;
   total: number;
-  deposit?: number;
-  amountDue?: number;
-  paymentMethod?: string;
+  status: 'draft' | 'sent' | 'paid' | 'overdue';
+  notes?: string;
+  storeId?: string;
+  deposit?: number; // Kept from original FirestoreInvoice
+  amountDue?: number; // Kept from original FirestoreInvoice
+  paymentMethod?: string; // Kept from original FirestoreInvoice
 }
 
 export interface FirestoreInventoryItem {
   name: string;
+  sku: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  costPrice: number;
+  sellingPrice: number;
+  supplier?: string;
+  reorderLevel: number;
+  location?: string;
+  description?: string;
+  storeId?: string;
+  // Kept from original FirestoreInventoryItem
   stock: number;
   onOrder?: number;
-  reorderLevel: number;
-  category: string;
-  supplier: string;
   imageUrl: string;
   imageHint: string;
   retailPrice: number;
-  costPrice: number;
   showInPOS?: boolean;
 }
 
@@ -221,16 +262,19 @@ export type Customer = WithId<FirestoreCustomer> & {
 };
 
 
-export type Order = WithId<FirestoreOrder> & {
+export type Order = WithId<Omit<FirestoreOrder, 'date' | 'deliveryDate'>> & {
+  date: string; // Override to string
+  deliveryDate: string; // Override to string
   customer: Omit<Customer, 'totalOrders' | 'totalSpent'>;
   maskedId: string;
   invoiceId?: string;
   invoiceMaskedId?: string;
   items?: WithId<OrderItem>[];
-  deliveryDate: string;
 };
 
-export type Invoice = WithId<FirestoreInvoice> & {
+export type Invoice = WithId<Omit<FirestoreInvoice, 'date' | 'dueDate'>> & {
+  date: string; // Override to string
+  dueDate: string; // Override to string
   customer: Omit<Customer, 'totalOrders' | 'totalSpent'>;
   maskedId: string;
 };
@@ -334,4 +378,9 @@ export interface AppContextType {
   ) => void;
   deleteMembership: (membershipId: string) => void;
   permissions: PermissionsMap;
+  stores: Store[];
+  activeStore: Store | null;
+  setActiveStore: (store: Store | null) => void;
+  addStore: (store: Omit<Store, 'id'>) => Promise<string>;
+  deleteStore: (storeId: string) => void;
 }

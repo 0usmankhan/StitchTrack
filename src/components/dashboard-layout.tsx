@@ -227,6 +227,42 @@ function ClockInOut() {
 }
 /* ------------------------------------------------------------------ */
 
+
+function StoreSwitcher() {
+  const { stores, activeStore, setActiveStore } = useApp();
+
+  if (!stores || stores.length === 0) return null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="hidden md:flex gap-2 items-center mr-2">
+          <Warehouse className="h-4 w-4" />
+          <span>{activeStore?.name || "All Locations"}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Switch Location</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => setActiveStore(null)}>
+          {!activeStore && <span className="mr-2">✓</span>}
+          All Locations
+        </DropdownMenuItem>
+        {stores.map(store => (
+          <DropdownMenuItem key={store.id} onClick={() => setActiveStore(store)}>
+            {activeStore?.id === store.id && <span className="mr-2">✓</span>}
+            {store.name}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/settings">Manage Locations</Link>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export default function DashboardLayout({
   children,
 }: {
@@ -413,6 +449,7 @@ export default function DashboardLayout({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <StoreSwitcher />
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
