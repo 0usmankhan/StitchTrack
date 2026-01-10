@@ -230,7 +230,7 @@ export const TemplateManagerModal = ({ isOpen, onClose, type }: TemplateManagerM
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-[70vw] h-[80vh] flex flex-col p-0 gap-0">
+            <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 gap-0">
                 <div className="p-6 pb-2">
                     <DialogHeader>
                         <DialogTitle>{getTitle()}</DialogTitle>
