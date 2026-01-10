@@ -44,7 +44,7 @@ export function InvoiceDetails({ invoice }: InvoiceDetailsProps) {
   const standardInvoiceRef = useRef(null);
 
   const handlePrintReceipt = useReactToPrint({
-    content: () => componentToPrintRef.current,
+    contentRef: componentToPrintRef,
     pageStyle: `
       @page { 
         size: 80mm auto; 
@@ -60,7 +60,7 @@ export function InvoiceDetails({ invoice }: InvoiceDetailsProps) {
   });
 
   const handlePrintInvoice = useReactToPrint({
-    content: () => standardInvoiceRef.current,
+    contentRef: standardInvoiceRef,
     documentTitle: `Invoice-${invoice.maskedId}`,
   });
 
@@ -77,7 +77,7 @@ export function InvoiceDetails({ invoice }: InvoiceDetailsProps) {
 
   return (
     <>
-      <div style={{ display: 'none' }}>
+      <div style={{ visibility: "hidden", height: 0, width: 0, overflow: "hidden", position: "absolute" }}>
         <PrintableReceipt ref={componentToPrintRef} invoice={invoice} />
         <StandardInvoice ref={standardInvoiceRef} invoice={invoice} />
       </div>

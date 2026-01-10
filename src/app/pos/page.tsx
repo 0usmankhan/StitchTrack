@@ -124,7 +124,7 @@ export default function PosPage() {
   const standardInvoiceRef = useRef(null);
 
   const handlePrintReceipt = useReactToPrint({
-    content: () => receiptRef.current,
+    contentRef: receiptRef,
     pageStyle: `
       @page { size: 80mm auto; margin: 0mm; } 
       @media print { body { -webkit-print-color-adjust: exact; font-family: "Source Code Pro", monospace; } }
@@ -132,7 +132,7 @@ export default function PosPage() {
   });
 
   const handlePrintInvoice = useReactToPrint({
-    content: () => standardInvoiceRef.current,
+    contentRef: standardInvoiceRef,
     documentTitle: `Invoice-${lastInvoice?.maskedId}`,
   });
 
@@ -1297,7 +1297,7 @@ export default function PosPage() {
         </div>
       </div>
       {/* Hidden components for printing */}
-      <div className="hidden">
+      <div style={{ visibility: "hidden", height: 0, width: 0, overflow: "hidden", position: "absolute" }}>
         {lastInvoice && <StandardInvoice ref={standardInvoiceRef} invoice={lastInvoice} />}
         {lastInvoice && <PrintableReceipt ref={receiptRef} invoice={lastInvoice} />}
       </div>
