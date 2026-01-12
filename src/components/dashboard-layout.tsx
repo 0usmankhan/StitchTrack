@@ -234,6 +234,15 @@ function StoreSwitcher() {
 
   if (!stores || stores.length === 0) return null;
 
+  if (stores.length === 1) {
+    return (
+      <Button variant="outline" size="sm" className="hidden md:flex gap-2 items-center mr-2 cursor-default hover:bg-background" disabled>
+        <Warehouse className="h-4 w-4" />
+        <span>{activeStore?.name}</span>
+      </Button>
+    )
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
