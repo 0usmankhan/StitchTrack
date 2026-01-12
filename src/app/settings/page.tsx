@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/dashboard-layout';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -232,17 +233,27 @@ export default function SettingsPage() {
                   <h3 className="text-sm font-medium">Existing Locations</h3>
                   {stores.length === 0 && <p className="text-sm text-muted-foreground">No locations found.</p>}
                   <div className="grid gap-4">
-                    {stores.map(store => (
-                      <div key={store.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div>
-                          <p className="font-medium">{store.name}</p>
-                          <p className="text-xs text-muted-foreground">ID: {store.id}</p>
-                        </div>
-                        <Button variant="destructive" size="sm" onClick={() => handleDeleteStore(store.id, store.name)}>
-                          Delete
-                        </Button>
-                      </div>
-                    ))}
+                    <div className="grid gap-4">
+                      {stores.map((store, index) => {
+                        const isPrimary = index === 0;
+                        return (
+                          <div key={store.id} className="flex items-center justify-between p-4 border rounded-lg">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{store.name}</p>
+                                {isPrimary && <Badge variant="secondary" className="text-xs">Primary</Badge>}
+                              </div>
+                              <p className="text-xs text-muted-foreground">ID: {store.id}</p>
+                            </div>
+                            {!isPrimary && (
+                              <Button variant="destructive" size="sm" onClick={() => handleDeleteStore(store.id, store.name)}>
+                                Delete
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </CardContent>

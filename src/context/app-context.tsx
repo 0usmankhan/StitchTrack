@@ -133,23 +133,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const stores = storesData || [];
 
   useEffect(() => {
-    // If we have stores but no active store, select one.
-    // Try localStorage first.
+    // 1. Auto-Create Primary Store if none exist and I am the owner
+    const initializePrimaryStore = async () => {
+      if (storesData && storesData.length === 0 && user?.uid === accountId) {
+        const primaryStoreId = await addStore({
+          name: 'Main Location',
+          address: '',
+          phone: '',
+          createdAt: serverTimestamp(),
+        });
+        return; // dependency change will trigger re-run
+      }
+    };
+
+    initializePrimaryStore();
+
+    // 2. Manage Active Store Selection
     if (stores.length > 0) {
       const savedId = localStorage.getItem('stitchtrack-active-store');
       if (savedId) {
         const found = stores.find(s => s.id === savedId);
         if (found) {
           if (activeStore?.id !== found.id) setActiveStoreState(found);
+          // If we found the saved store, we are good.
           return;
         }
       }
-      // Fallback to first store if no saved store or saved store not found
+
+      // Fallback: If no saved store, or saved store invalid, default to the first one (Primary).
+      // Only set if not already set to avoid loops, though check above handles identity.
       if (!activeStore) {
         setActiveStoreState(stores[0]);
       }
     }
-  }, [stores, activeStore]);
+  }, [storesData, stores, activeStore, user, accountId]);
 
   const setActiveStore = (store: Store | null) => {
     // We expect store to be non-null in the new logic, but keeping type flexible for safety
